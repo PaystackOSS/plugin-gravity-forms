@@ -12,8 +12,8 @@ class GFPaystackApi
     public function __construct($config)
     {
         $this->plugin_name = 'Paystack Addon for Gravity Forms';
-        $this->secret_key = isset($config->secret_key) ? $config->secret_key : '';
-        $this->public_key = isset($config->public_key) ? $config->public_key : '';
+        $this->secret_key = $config->secret_key ?? '';
+        $this->public_key = $config->public_key ?? '';
     }
 
     /**
