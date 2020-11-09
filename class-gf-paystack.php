@@ -88,7 +88,7 @@ class GFPaystack extends GFPaymentAddOn
 	 *
 	 * @var string $_url The URL of the Add-On.
 	 */
-	protected $_url = 'http://www.paystack.com';
+	protected $_url = 'https://paystack.com/docs/libraries-and-plugins/plugins#wordpress';
 
 	/**
 	 * Defines the title of this Add-On.
@@ -109,16 +109,6 @@ class GFPaystack extends GFPaymentAddOn
 	 * @var string $_short_title The short title.
 	 */
 	protected $_short_title = 'Paystack';
-
-	/**
-	 * Defines if Add-On should use Gravity Forms servers for update data.
-	 *
-	 * @since  1.0
-	 * @access protected
-	 *
-	 * @var bool $_enable_rg_autoupgrade true
-	 */
-	protected $_enable_rg_autoupgrade = true;
 
 	/**
 	 * Defines if user will not be able to create feeds for a form until a credit card field has been added.
