@@ -1247,7 +1247,7 @@ class GFPaystack extends GFPaymentAddOn
 				}
 
 				if (!$entry_id) {
-					return new WP_Error('entry_not_found', sprintf(__('Entry for transaction id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['transaction_id']));
+					return new WP_Error('entry_not_found', sprintf(__('Entry for transaction id: %s was not found. Webhook cannot be processed.', 'gravityformspaystack'), $action['transaction_id']));
 				}
 
 				$entry = GFAPI::get_entry($entry_id);
@@ -1278,7 +1278,7 @@ class GFPaystack extends GFPaymentAddOn
 				} catch (\Exception $e) {
 					$this->log_error(__METHOD__ . "(): Subscription details not found. Reason: " . $e->getMessage());
 
-					return new WP_Error('subscription_not_found', sprintf(__('Details for subscription id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['subscription_id']));
+					return new WP_Error('subscription_not_found', sprintf(__('Details for subscription id: %s was not found. Webhook cannot be processed.', 'gravityformspaystack'), $action['subscription_id']));
 				}
 
 				if (is_array($subscription['data']['invoices']) && count($subscription['data']['invoices']) == 1) {
@@ -1288,7 +1288,7 @@ class GFPaystack extends GFPaymentAddOn
 				}
 
 				if (!$entry_id) {
-					return new WP_Error('entry_not_found', sprintf(__('Entry for subscription id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['subscription_id']));
+					return new WP_Error('entry_not_found', sprintf(__('Entry for subscription id: %s was not found. Webhook cannot be processed.', 'gravityformspaystack'), $action['subscription_id']));
 				}
 
 				$entry = GFAPI::get_entry($entry_id);
@@ -1316,7 +1316,7 @@ class GFPaystack extends GFPaymentAddOn
 				$entry_id = $this->get_entry_by_transaction_id($action['subscription_id']);
 
 				if (!$entry_id) {
-					return new WP_Error('entry_not_found', sprintf(__('Entry for subscription id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['subscription_id']));
+					return new WP_Error('entry_not_found', sprintf(__('Entry for subscription id: %s was not found. Webhook cannot be processed.', 'gravityformspaystack'), $action['subscription_id']));
 				}
 
 				$entry = GFAPI::get_entry($entry_id);
@@ -1340,7 +1340,7 @@ class GFPaystack extends GFPaymentAddOn
 				} catch (\Exception $e) {
 					$this->log_error(__METHOD__ . "(): Subscription details not found. Reason: " . $e->getMessage());
 
-					return new WP_Error('subscription_not_found', sprintf(__('Details for subscription id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['subscription_id']));
+					return new WP_Error('subscription_not_found', sprintf(__('Details for subscription id: %s was not found. Webhook cannot be processed.', 'gravityformspaystack'), $action['subscription_id']));
 				}
 
 				$invoice_limit = (int) rgars($subscription, 'data/invoice_limit');
@@ -1359,7 +1359,7 @@ class GFPaystack extends GFPaymentAddOn
 				$entry_id  = $this->get_entry_by_transaction_id($action['subscription_id']);
 
 				if (!$entry_id) {
-					return new WP_Error('entry_not_found', sprintf(__('Entry for transaction id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['transaction_id']));
+					return new WP_Error('entry_not_found', sprintf(__('Entry for transaction id: %s was not found. Webhook cannot be processed.', 'gravityformspaystack'), $action['transaction_id']));
 				}
 
 				$entry = GFAPI::get_entry($entry_id);
@@ -1369,7 +1369,7 @@ class GFPaystack extends GFPaymentAddOn
 				} catch (\Exception $e) {
 					$this->log_error(__METHOD__ . "(): Subscription details not found. Reason: " . $e->getMessage());
 
-					return new WP_Error('subscription_not_found', sprintf(__('Details for subscription id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['subscription_id']));
+					return new WP_Error('subscription_not_found', sprintf(__('Details for subscription id: %s was not found. Webhook cannot be processed.', 'gravityformspaystack'), $action['subscription_id']));
 				}
 
 				$reference = rgars($event, 'data/transaction/reference');
@@ -1399,7 +1399,7 @@ class GFPaystack extends GFPaymentAddOn
 				$entry_id  = $this->get_entry_by_transaction_id($action['subscription_id']);
 
 				if (!$entry_id) {
-					return new WP_Error('entry_not_found', sprintf(__('Entry for transaction id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['transaction_id']));
+					return new WP_Error('entry_not_found', sprintf(__('Entry for transaction id: %s was not found. Webhook cannot be processed.', 'gravityformspaystack'), $action['transaction_id']));
 				}
 
 				$entry = GFAPI::get_entry($entry_id);
