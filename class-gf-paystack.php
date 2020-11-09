@@ -474,10 +474,16 @@ class GFPaystack extends GFPaymentAddOn
 		// Add send invoice field if the feed transaction type is a subscription.
 		if ($this->get_setting('transactionType') === 'subscription') {
 			$invoice_settings = array(
-				'name'    => 'send_invoices',
-				'label'   => esc_html__('Send Invoices', 'gravityformspaystack'),
-				'type'    => 'receipt',
-				'tooltip' => '<h6>' . esc_html__('Send Paystack Invoices', 'gravityformspaystack') . '</h6>' . esc_html__('Enable send invoices. Paystack can send a invoice via email to customers.', 'gravityformspaystack'),
+				'name'		=> 'sendInvoices',
+				'label' 	=> esc_html__('Send Invoices', 'gravityformspaystack'),
+				'type'		=> 'checkbox',
+				'choices' 	=> array(
+					array(
+						'label' => 'Check if you want invoices to be sent to your customers',
+						'name'  => 'sendInvoices',
+					),
+				),
+				'tooltip'	=> '<h6>' . esc_html__('Send Invoices', 'gravityformspaystack') . '</h6>' . esc_html__('If enabled, Paystack can send an email invoice to customers.', 'gravityformspaystack'),
 			);
 
 			$default_settings = $this->add_field_before('setupFee', $invoice_settings, $default_settings);
@@ -504,7 +510,7 @@ class GFPaystack extends GFPaymentAddOn
 
 		// Add subscription name field.
 		$plan_name_field = array(
-			'name'    => 'plan_name',
+			'name'    => 'planName',
 			'label'   => esc_html__('Plan Name', 'gravityformspaystack'),
 			'type'    => 'text',
 			'class'   => 'medium merge-tag-support mt-hide_all_fields mt-position-right',
@@ -521,7 +527,7 @@ class GFPaystack extends GFPaymentAddOn
 			'field_map'  => array(
 				array(
 					'name'       => 'email',
-					'label'      => esc_html__('Email', 'gravityformspaystack'),
+					'label'      => esc_html__('Email Address', 'gravityformspaystack'),
 					'required'   => true,
 					'field_type' => array('email', 'hidden'),
 					'tooltip'    => '<h6>' . esc_html__('Email', 'gravityformspaystack') . '</h6>' . esc_html__('You can specify an email field and it will be sent to the Paystack screen as the customer\'s email.', 'gravityformspaystack'),
@@ -535,9 +541,23 @@ class GFPaystack extends GFPaymentAddOn
 					'name'     => 'last_name',
 					'label'    => esc_html__('Last Name', 'gravityformspaystack'),
 					'required' => ($this->get_setting('transactionType') == 'subscription') ? true : false,
-				)
+				),
+				array(
+					'name'     	=> 'phone',
+					'label'    	=> esc_html__('Phone Number', 'gravityformspaystack'),
+					'required' 	=> false,
+				),
 			),
 		);
+
+		if ($transaction_type == 'subscription') {
+			$customer_info_field['field_map'][] = array(
+				'name'      => 'recurring_times',
+				'label'     => esc_html__('Recurring Times', 'gravityformspaystack'),
+				'required'  => false,
+				'tooltip'	=> '<h6>' . esc_html__('Recurring Times', 'gravityformspaystack') . '</h6>' . esc_html__('(OPTIONAL). Setting this will allow users to select then number of times a charge should happen during a subscrption to a plan. This will override the "Recurring Times" option under "Subscription Settings" section above. It is recommended to create a select field. Values can be "2-100" or "0" for indefinite. In case an empty value or 1 is passed, the plugin will fall back to the other aforementioned "Recurring Times" option.', 'gravityformspaystack'),
+			);
+		}
 
 		// Add customer information fields.
 		$default_settings = $this->add_field_before('billingInformation', $customer_info_field, $default_settings);
@@ -561,16 +581,6 @@ class GFPaystack extends GFPaymentAddOn
 		if ($this->get_setting('transactionType') === 'donation') {
 			$default_settings = parent::remove_field('billingInformation', $default_settings);
 		}
-
-		// // Add Paystack Credential section.
-		// $default_settings[] = array(
-		// 	'title'      => esc_html__('Paystack Configuration', 'gravityformspaystack'),
-		// 	'fields'     => $this->api_settings_fields(),
-		// 	'dependency' => array(
-		// 		'field'  => 'transactionType',
-		// 		'values' => array('subscription', 'product', 'donation'),
-		// 	),
-		// );
 
 		return $default_settings;
 	}
@@ -631,44 +641,6 @@ class GFPaystack extends GFPaymentAddOn
 			'annually'   => array('label' => esc_html__('Annually', 'gravityformspaystack')),
 			'biannually' => array('label' => esc_html__('Biannually', 'gravityformspaystack')),
 		);
-	}
-
-	/**
-	 * Define the markup for the receipt type field.
-	 *
-	 * @access public
-	 *
-	 * @param array     $field The field properties. Not used.
-	 * @param bool|true $echo  Should the setting markup be echoed. Defaults to true.
-	 *
-	 * @return string|void The HTML markup if $echo is set to false. Void otherwise.
-	 */
-	public function settings_receipt($field, $echo = true)
-	{
-		// Prepare enabled field settings.
-		$enabled_field = array(
-			'name'       => $field['name'] . '_checkbox',
-			'type'       => 'checkbox',
-			'horizontal' => true,
-			'choices'    => array(
-				array(
-					'label'    => esc_html__('Enabled', 'gravityformspaystack'),
-					'name'     => $field['name'] . '_enabled',
-					'value'    => "1",
-					'default_value' => "1"
-				),
-			),
-		);
-
-		// Get checkbox markup.
-		$html = $this->settings_checkbox($enabled_field, false);
-
-		// Echo setting markup, if enabled.
-		if ($echo) {
-			echo $html;
-		}
-
-		return $html;
 	}
 
 	/**
@@ -931,14 +903,14 @@ class GFPaystack extends GFPaymentAddOn
 			return false;
 		}
 
-		// Updating lead's payment_status to Processing
-		GFAPI::update_entry_property($entry['id'], 'payment_status', 'Processing');
-
 		// Getting mode (Live (Production) or Test (Sandbox))
 		$mode = $feed['meta']['mode'];
 
 		// Setup the Paystack API
 		$this->paystack_api($mode);
+
+		// Get the transaction type
+		$transaction_type = $feed['meta']['transactionType'];
 
 		// Getting the product status
 		$is_product = $feed['meta']['transactionType'] === 'product';
@@ -946,11 +918,16 @@ class GFPaystack extends GFPaymentAddOn
 		// Getting the subscription status
 		$is_subscription = $feed['meta']['transactionType'] === 'subscription';
 
+		// URL that will listen to callback from Paystack
+		$page_url = get_bloginfo('url');
+		$ids_query = "ids={$entry['id']}|{$feed['id']}|{$form['id']}";
+		$ids_query .= '&hash=' . wp_hash($ids_query);
+
+		$return_url = add_query_arg('gf_paystack_return', base64_encode($ids_query), $page_url);
+
 		$payment_amount = rgar($submission_data, 'payment_amount');
-		$setup_fee      = rgar($submission_data, 'setup_fee');
-		$trial_amount   = rgar($submission_data, 'trial');
-		$line_items     = rgar($submission_data, 'line_items');
-		$discounts      = rgar($submission_data, 'discounts');
+		// $setup_fee      = rgar($submission_data, 'setup_fee');
+		// $trial_amount   = rgar($submission_data, 'trial');
 
 		// Currency
 		$currency = rgar($entry, 'currency');
@@ -961,28 +938,23 @@ class GFPaystack extends GFPaymentAddOn
 		// Get feed custom metadata
 		$metadata = $this->get_paystack_meta_data($feed, $entry, $form);
 
-		// URL that will listen to callback from Paystack
-		$page_url = get_bloginfo('url');
-		$ids_query = "ids={$entry['id']}|{$feed['id']}|{$form['id']}";
-		$ids_query .= '&hash=' . wp_hash($ids_query);
+		// Generate transaction reference
+		$reference = uniqid("gf-{$entry['id']}-");
 
-		$return_url = add_query_arg('gf_paystack_return', base64_encode($ids_query), $page_url);
+		// Updating lead's payment_status to Processing
+		GFAPI::update_entry_property($entry['id'], 'payment_status', 'Processing');
 
-		// Generate transaction id
-		$transaction_id = uniqid("gf-{$entry['id']}-");
+		GFAPI::update_entry_property($entry['id'], 'payment_amount', $payment_amount);
+		GFAPI::update_entry_property($entry['id'], 'transaction_type', $transaction_type);
 
-		if ($is_product) {
-			// Create a Payment Request & Send Invoice
-		}
-
-		// Initialize the charge on Paystack's servers - this will be used to charge the user's card
+		// Prepare transaction data
 		$args = array(
 			'email'        => $customer_info['email'],
 			'currency'     => $currency,
 			'amount'       => $this->get_amount_export($payment_amount, $currency),
-			'reference'    => $transaction_id,
+			'reference'    => $reference,
 			'callback_url' => $return_url,
-			'description'  => sprintf(__('%s (transaction: %s)', 'paystack'), $feed['meta']['feedName'], $transaction_id),
+			'description'  => sprintf(__('%s (transaction: %s)', 'paystack'), $feed['meta']['feedName'], $reference),
 			'metadata'     => array_merge(array(
 				'entry_id'    => $entry['id'],
 				'site_url'    => esc_url(get_site_url()),
@@ -990,30 +962,44 @@ class GFPaystack extends GFPaymentAddOn
 			), $metadata)
 		);
 
+		if ($is_product) {
+			$line_items     = rgar($submission_data, 'line_items');
+			$discounts      = rgar($submission_data, 'discounts');
+
+			// Create a Payment Request & Send Invoice
+		}
+
 		if ($is_subscription) {
 			$plan = $this->create_plan($feed, $payment_amount, $currency);
 
-			$args['plan']     = $plan['plan_code'];
+			$args['plan'] = $plan['plan_code'];
+
+			$submitted_recurring_times = rgar($submission_data, 'recurring_times');
+			$invoice_limit = !empty($submitted_recurring_times) && $submitted_recurring_times !== '1' ? $submitted_recurring_times : null;
+
+			if (!empty($invoice_limit) || $invoice_limit !== 'Infinite') {
+				$args['invoice_limit'] = (int) $invoice_limit;
+			}
+
 			$args['channels'] = ['card'];
-			
+
 			gform_update_meta($entry['id'], 'paystack_plan_code', $plan['plan_code']);
 		}
 
-		// Initialize a new payment here
+		// Initialize the charge on Paystack's servers - this will be used to charge the user's card
 		$response = (object) $this->paystack_api->send_request("transaction/initialize/", $args);
 
 		if (!$response->status) {
 			return false;
 		}
 
-		gform_update_meta($entry['id'], 'paystack_tx_reference', $plan['reference']);
-		gform_update_meta($entry['id'], 'paystack_tx_access_code', $plan['access_code']);
+		gform_update_meta($entry['id'], 'paystack_tx_reference', $response->data['reference']);
+		gform_update_meta($entry['id'], 'paystack_tx_access_code', $response->data['access_code']);
+		gform_update_meta($entry['id'], 'paystack_tx_auth_url', $response->data['authorization_url']);
 
-		$url = $response->data['authorization_url'];
+		$this->log_debug(__METHOD__ . "(): Sending to Paystack: {$response->data['authorization_url']}");
 
-		$this->log_debug(__METHOD__ . "(): Sending to Paystack: {$url}");
-
-		return $url;
+		return  $response->data['authorization_url'];
 	}
 
 	public function get_fields_meta_data($feed, $entry, $fields)
@@ -1080,7 +1066,7 @@ class GFPaystack extends GFPaymentAddOn
 		}
 
 		// Get Paystack subscription object.
-		$subscription = $this->get_subscription($entry['subscription_id']);
+		$subscription = $this->get_subscription($entry['transaction_id']);
 
 		if (!$subscription['status']) {
 			return false;
@@ -1095,7 +1081,7 @@ class GFPaystack extends GFPaymentAddOn
 		try {
 			$this->paystack_api->send_request('subscription/disable', [
 				'code'  => $entry['subscription_id'],
-				'token' =>  null //email token,
+				'token' => gform_get_meta($entry['id'], 'paystack_email_token') //email token,
 			]);
 
 			$this->log_debug(__METHOD__ . '(): Subscription cancelled.');
@@ -1123,49 +1109,70 @@ class GFPaystack extends GFPaymentAddOn
 		if ($str = sanitize_text_field(rgget('gf_paystack_return'))) {
 			$str = base64_decode($str);
 
+			$this->log_debug(__METHOD__ . '(): Return callback request received. Starting to process.');
+
 			parse_str($str, $query);
 
 			if (wp_hash('ids=' . $query['ids']) == $query['hash']) {
 				list($entry_id, $feed_id, $form_id) = explode('|', $query['ids']);
 
 				$entry = GFAPI::get_entry($entry_id);
-				$feed = $this->get_feed($feed_id);
 				$form = GFAPI::get_form($form_id);
 
 				if (is_wp_error($entry) || !$entry) {
-					return;
+					$this->log_error(__METHOD__ . '(): Entry could not be found. Aborting.');
+
+					return false;
 				}
 
-				// Getting mode (Live (Production) or Test (Sandbox))
+				$this->log_debug(__METHOD__ . '(): Entry has been found => ' . print_r($entry, true));
+
+				if ($entry['status'] == 'spam') {
+					$this->log_error(__METHOD__ . '(): Entry is marked as spam. Aborting.');
+
+					return false;
+				}
+
+				// Get feed
+				$feed = $this->get_feed($feed_id);
+
+				// Let's ignore forms that are no longer configured to use the Paystack add-on  
+				if (!$feed || !rgar($feed, 'is_active')) {
+					$this->log_error(__METHOD__ . "(): Form no longer uses the Paystack Addon. Form ID: {$entry['form_id']}. Aborting.");
+
+					return false;
+				}
+
+				$this->log_debug(__METHOD__ . "(): Form {$entry['form_id']} is properly configured.");
+
+				// Getting mode Live (Production) or Test (Sandbox)
 				$mode = $feed['meta']['mode'];
 
 				$this->paystack_api($mode);
 
 				$reference = sanitize_text_field(rgget('reference'));
 
-				$response = (object) $this->paystack_api->send_request("transaction/verify/{$reference}", [], 'get');
+				try {
+					$response = (object) $this->paystack_api->send_request("transaction/verify/{$reference}", [], 'get');
 
-				$charge = (object) $response->data;
+					$this->log_debug(__METHOD__ . "(): Transaction verified. " . print_r($response, 1));
+				} catch (\Exception $e) {
+					$this->log_error(__METHOD__ . "(): Transaction could not be verified. Reason: " . $e->getMessage());
 
-				if (!$response || $charge->status == 'failed') {
+					return new WP_Error('transaction_verification', $e->getMessage());
+				}
+
+				$charge = $response->data;
+
+				if (!$response || $charge['status'] !== 'success') {
 					// Charge Failed
-					return;
+					$this->log_error(__METHOD__ . "(): Transaction verification failed Reason: " . $response->message);
+
+					return false;
 				}
 
 				// Log Payment successful payment from this addon to paystack
 				$this->paystack_api->log_transaction_success($reference);
-
-				// // Check if the webhook event has completed session, if not, call complete_checkout_session().
-				if (!empty($charge->plan)) {
-					$is_payment_completed = $entry['payment_status'] === 'Active';
-				} else {
-					$is_payment_completed = $entry['payment_status'] === 'Paid' || $entry['payment_status'] === 'Authorized';
-				}
-
-				if (!$is_payment_completed) {
-					$this->log_debug(__METHOD__ . '(): Paystack Checkout will be completed in the form confirmation page.');
-					// $this->complete_checkout_process($charge, $entry, $feed, $form);
-				}
 
 				if (!class_exists('GFFormDisplay')) {
 					require_once(GFCommon::get_base_path() . '/form_display.php');
@@ -1213,69 +1220,242 @@ class GFPaystack extends GFPaymentAddOn
 		if (!$this->is_gravityforms_supported()) {
 			return;
 		}
-	
-		$this->log_debug(__METHOD__ . '(): Webhook request received. Starting to process => ' . print_r($_REQUEST, true));
 
+		$event = $this->get_webhook_event();
+
+		if (!$event || is_wp_error($event)) {
+			return $event;
+		}
+
+		$this->log_debug(__METHOD__ . '(): Webhook callback received. Starting to process => ' . print_r($_REQUEST, true));
+
+		// Get event type.
+		$type = $event['event'];
+
+		switch ($type) {
+			case 'charge.success':
+				if (!isset($event['data']['id']) || isset($event['data']['metadata']['invoice_action'])) {
+					return false;
+				}
+
+				$action['transaction_id']  = rgars($event, 'data/id');
+
+				$entry_id = rgars($event, 'data/metadata/entry_id');
+
+				if (!$entry_id && $reference = rgars($event, 'data/reference')) {
+					$entry_id = $this->get_entry_id_by_reference($reference);
+				}
+
+				if (!$entry_id) {
+					return new WP_Error('entry_not_found', sprintf(__('Entry for transaction id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['transaction_id']));
+				}
+
+				$entry = GFAPI::get_entry($entry_id);
+
+				$this->log_debug(__METHOD__ . '(): Entry has been found => ' . print_r($entry, true));
+
+				// $feed = $this->get_payment_feed($entry);
+
+				if (rgar($entry, 'transaction_type') == 'subscription') {
+					gform_update_meta($entry_id, 'paystack_tx', rgar($event, 'data'));
+					gform_update_meta($entry_id, 'paystack_tx_auth_code', rgars($event, 'data/authorization/authorization_code'));
+				} else {
+					$action['id']               = rgars($event, 'data/id') . '_' . $type;
+					$action['entry_id']         = $entry_id;
+					$action['amount']           = $this->get_amount_import(rgars($event, 'data/amount'), rgars($event, 'data/currency'));
+					$action['type']             = 'complete_payment';
+					$action['ready_to_fulfill'] = !$entry['is_fulfilled'] ? true : false;
+					$action['payment_date']     = rgars($event, 'data/paidAt');
+					$action['payment_method']   = $this->_slug;
+				}
+
+				break;
+			case 'subscription.create':
+				$action['subscription_id'] = rgars($event, 'data/subscription_code');
+
+				try {
+					$subscription = $this->get_subscription($action['subscription_id']);
+				} catch (\Exception $e) {
+					$this->log_error(__METHOD__ . "(): Subscription details not found. Reason: " . $e->getMessage());
+
+					return new WP_Error('subscription_not_found', sprintf(__('Details for subscription id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['subscription_id']));
+				}
+
+				if (is_array($subscription['data']['invoices']) && count($subscription['data']['invoices']) == 1) {
+					$transaction = $subscription['data']['invoices'][0];
+
+					$entry_id = $transaction['status'] == 'success' ? $this->get_entry_id_by_reference($transaction['reference']) : false;
+				}
+
+				if (!$entry_id) {
+					return new WP_Error('entry_not_found', sprintf(__('Entry for subscription id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['subscription_id']));
+				}
+
+				$entry = GFAPI::get_entry($entry_id);
+
+				$this->add_subscription_payment($entry, [
+					'entry_id'        => $entry_id,
+					'subscription_id' => rgars($subscription, 'data/subscription_code'),
+					'transaction_id'  => rgars($transaction, 'data/id'),
+					'amount'          => $this->get_amount_import(rgars($transaction, 'data/amount'), rgar($entry, 'currency'))
+				]);
+
+				gform_update_meta($entry_id, 'paystack_email_token', rgars($event, 'data/email_token'));
+
+				$action['id']				= $action['subscription_id'] . '_' . $type;
+				$action['type']				= 'create_subscription';
+				$action['entry_id']         = $entry_id;
+				$action['amount']			= $this->get_amount_import(rgars($event, 'data/amount'), rgar($entry, 'currency'));
+				$action['payment_method']	= $this->_slug;
+				$action['ready_to_fulfill'] = !$entry['is_fulfilled'] ? true : false;
+
+				break;
+			case 'subscription.disable':
+				$action['subscription_id'] = rgars($event, 'data/subscription_code');
+
+				$entry_id = $this->get_entry_by_transaction_id($action['subscription_id']);
+
+				if (!$entry_id) {
+					return new WP_Error('entry_not_found', sprintf(__('Entry for subscription id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['subscription_id']));
+				}
+
+				$entry = GFAPI::get_entry($entry_id);
+
+				$action['entry_id'] = $entry_id;
+
+				try {
+					$subscription = $this->get_subscription($action['subscription_id']);
+
+					$paid_invoices = 0;
+
+					if (is_array($subscription['data']['invoices']) && $invoices = $subscription['data']['invoices']) {
+						$this->log_debug(__METHOD__ . '(): Subscription Invoices: ' . print_r($invoices, 1));
+
+						foreach ($invoices as $invoice) {
+							if ($invoice['status'] == 'success') {
+								$paid_invoices++;
+							}
+						}
+					}
+				} catch (\Exception $e) {
+					$this->log_error(__METHOD__ . "(): Subscription details not found. Reason: " . $e->getMessage());
+
+					return new WP_Error('subscription_not_found', sprintf(__('Details for subscription id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['subscription_id']));
+				}
+
+				$invoice_limit = (int) rgars($subscription, 'data/invoice_limit');
+
+				if ($invoice_limit && $paid_invoices >= $invoice_limit) {
+					$action['type']     = 'expire_subscription';
+				} else {
+					$action['type']     = 'cancel_subscription';
+				}
+
+				break;
+
+			case 'invoice.create || invoice.update':
+				$action['subscription_id'] = rgars($event, 'data/subscription/subscription_code');
+
+				$entry_id  = $this->get_entry_by_transaction_id($action['subscription_id']);
+
+				if (!$entry_id) {
+					return new WP_Error('entry_not_found', sprintf(__('Entry for transaction id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['transaction_id']));
+				}
+
+				$entry = GFAPI::get_entry($entry_id);
+
+				try {
+					$subscription = $this->get_subscription($action['subscription_id']);
+				} catch (\Exception $e) {
+					$this->log_error(__METHOD__ . "(): Subscription details not found. Reason: " . $e->getMessage());
+
+					return new WP_Error('subscription_not_found', sprintf(__('Details for subscription id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['subscription_id']));
+				}
+
+				$reference = rgars($event, 'data/transaction/reference');
+
+				if (is_array($subscription['data']['invoices'])) {
+					$key = array_search($reference, array_column($subscription['data']['invoices'], 'reference'));
+
+					$transaction = $subscription['data']['invoices'][$key];
+				} else {
+					$transaction = $this->paystack_api->send_request("transaction/verify/{$reference}", [], 'get');
+				}
+				
+				$action['type']             = 'add_subscription_payment';
+				$action['subscription_id']  = rgar($entry, 'transaction_id');
+				$action['transaction_id']   = rgars($transaction, 'data/id');
+				$action['entry_id']         = $entry_id;
+				$action['payment_method']	= $this->_slug;
+
+				break;
+
+			case 'invoice.payment_failed':
+				$action['subscription_id'] = rgars($event, 'data/subscription/subscription_code');
+
+				//no transaction created
+				$action['id'] = $action['subscription_id'] . '_' . rgars($event, 'data/invoice_code') . '_' . $type;
+
+				$entry_id  = $this->get_entry_by_transaction_id($action['subscription_id']);
+
+				if (!$entry_id) {
+					return new WP_Error('entry_not_found', sprintf(__('Entry for transaction id: %s was not found. Webhook cannot be processed.', 'gf-paystack'), $action['transaction_id']));
+				}
+
+				$entry = GFAPI::get_entry($entry_id);
+
+				$action['type']      = 'fail_subscription_payment';
+				$action['entry_id']  = $entry['id'];
+				$action['amount']    = $this->get_amount_import(rgars($event, 'data/amount'), rgar($entry, 'currency'));
+
+				break;
+		}
+
+		if (rgempty('entry_id', $action)) {
+			$this->log_debug(__METHOD__ . '() entry_id not set for callback action; no further processing required.');
+
+			return false;
+		}
+
+		return $action;
+	}
+
+	/**
+	 * Retrieve the Paystack Event for the received webhook.
+	 *
+	 *
+	 * @return false|WP_Error
+	 */
+	public function get_webhook_event()
+	{
 		// Retrieve the request's payload
-		$request = @file_get_contents('php://input');
+		$body = @file_get_contents('php://input');
 
-		// Validate Webhook Request
-		$is_verified = $this->paystack_api->validate_webhook($request);
+		$response = json_decode($body, true);
+
+		// Get api mode from data
+		$mode = rgars($response, 'data/domain');
+
+		$this->paystack_api($mode);
+
+		// Validate Webhook Request Payload
+		try {
+			$is_verified = $this->paystack_api->validate_webhook($body);
+		} catch (\Exception $e) {
+			$this->log_error(__METHOD__ . "(): Error: " . $e->getMessage());
+
+			return new WP_Error('Webhook Validation Failed', $e->getMessage());
+		}
+
 		if (!$is_verified) {
 			$this->log_error(__METHOD__ . '(): Wehhook request is invalid. Aborting.');
 
 			return false;
 		}
 
-		// Get request properties.
-		$body =  json_decode($request, true);
-		$data = $body['data'];
-		$event = $body['event'];
+		$this->log_debug(__METHOD__ . "(): Processing $mode mode event.");
 
-		// Get api mode from data
-		$mode = $data['domain'];
-
-		$this->paystack_api($mode);
-
-		$this->log_debug(__METHOD__ . '() Webhook event details => ' . print_r($data, 1));
-
-		switch ($event) {
-			case 'charge.success':
-				$entry_id = rgars($data, 'metadata/entry_id');
-				$entry = GFAPI::get_entry($entry_id);
-				
-				$this->log_debug(__METHOD__ . '(): Entry has been found => ' . print_r($entry, true));
-
-				// $feed = $this->get_payment_feed($entry);
-				
-				// $this->log_debug(__METHOD__ . "(): Form {$entry['form_id']} is properly configured.");
-		
-				$action['entry_id'] = $entry_id;
-				$action['type']     = 'complete_payment';
-				$action['amount']   = $this->get_amount_import(rgar($data, 'amount'), $data['currency']);
-
-				break;
-
-			case 'paymentrequest.success':
-
-				break;
-
-			case 'subscription.create':
-
-				break;
-
-			case 'invoice.create || invoice.update':
-
-				break;
-		}
-
-		// if (rgempty('entry_id', $action)) {
-		// 	$this->log_debug(__METHOD__ . '() entry_id not set for callback action; no further processing required.');
-
-		// 	return false;
-		// }
-
-		return $action;
+		return $response;
 	}
 
 	/**
@@ -1354,20 +1534,20 @@ class GFPaystack extends GFPaymentAddOn
 	public function create_plan($feed, $payment_amount, $currency)
 	{
 		// Prepare plan metadata.
-		$name = rgars($feed, 'meta/plan_name') ?? $feed['meta']['feedName'];
-
 		$billing_cycle   = rgar($feed['meta'], 'billingCycle_unit');
 		$recurring_times = (int) rgar($feed['meta'], 'recurringTimes');
 
-		$send_invoices   = (rgar($feed['meta'], 'send_invoices_enabled') == 1) ? true : false;
+		$send_invoices   = (rgar($feed['meta'], 'sendInvoices') == 1) ? true : false;
+
+		$plan_name = $this->get_plan_name($feed, $billing_cycle, $payment_amount, $currency);
 
 		$args = array(
-			'name'            => $name,
+			'name'            => $plan_name,
+			'currency'        => $currency,
+			'amount'          => $this->get_amount_export($payment_amount, $currency),
 			'interval'        => $billing_cycle,
 			'invoice_limit'   => $recurring_times,
-			'currency'        => $currency,
 			'send_invoices'   => $send_invoices,
-			'amount'          => $this->get_amount_export($payment_amount, $currency)
 		);
 
 		// Log the plan to be created.
@@ -1376,9 +1556,16 @@ class GFPaystack extends GFPaymentAddOn
 		// Create Paystack plan.
 		$response = (object) $this->paystack_api->send_request('plan', $args);
 
-		$plan = $response->data;
+		return $response->data;
+	}
 
-		return $plan;
+	public function get_plan_name($feed, $billing_cycle, $payment_amount, $currency = '')
+	{
+		$get_name = rgars($feed, 'meta/planName') ?? $feed['meta']['feedName'];
+
+		$plan_name = implode('_', array_filter(array($get_name, $feed['id'], $billing_cycle, $payment_amount, $currency)));
+
+		return $plan_name;
 	}
 
 	/**
@@ -1396,6 +1583,7 @@ class GFPaystack extends GFPaymentAddOn
 			$subscription = $this->paystack_api->send_request("subscription/{$subscription_id_or_code}");
 		} catch (\Exception $e) {
 			$this->log_error(__METHOD__ . '(): Unable to get subscription; ' . $e->getMessage());
+
 			$subscription = false;
 		}
 
@@ -1557,9 +1745,6 @@ class GFPaystack extends GFPaymentAddOn
 		/**
 		 * Filters the API mode.
 		 *
-		 * @since 1.10.1
-		 * @since 2.8   Added $feed_id param.
-		 *
 		 * @param string $api_mode The API mode.
 		 * @param int    $feed_id  Feed ID.
 		 */
@@ -1612,8 +1797,7 @@ class GFPaystack extends GFPaymentAddOn
 	 *
 	 * @access  public
 	 *
-	 * @used-by GFPaystack::include_paystack_api()
-	 * @uses    GFPaystack::get_api_key()
+	 * @uses  GFPaystack::get_api_key()
 	 *
 	 * @param null|string $mode    The API mode; live or test.
 	 * @param null|array  $settings The current settings.
@@ -1696,5 +1880,29 @@ class GFPaystack extends GFPaymentAddOn
 		$this->_enable_rate_limits = apply_filters('gform_paystack_enable_rate_limits', $this->_enable_rate_limits, $form_id);
 
 		return $this->_enable_rate_limits;
+	}
+
+	public function get_entry_id_by_auth_code($auth_code)
+	{
+		global $wpdb;
+
+		$entry_meta_table_name = self::get_entry_meta_table_name();
+
+		$sql      = $wpdb->prepare("SELECT entry_id FROM {$entry_meta_table_name} WHERE meta_key = 'paystack_tx_auth_code' AND meta_value = '%s'", $auth_code);
+		$entry_id = $wpdb->get_var($sql);
+
+		return $entry_id ? $entry_id : false;
+	}
+
+	public function get_entry_id_by_reference($reference)
+	{
+		global $wpdb;
+
+		$entry_meta_table_name = self::get_entry_meta_table_name();
+
+		$sql      = $wpdb->prepare("SELECT entry_id FROM {$entry_meta_table_name} WHERE meta_key = 'paystack_tx_reference' AND meta_value = '%s'", $reference);
+		$entry_id = $wpdb->get_var($sql);
+
+		return $entry_id ? $entry_id : false;
 	}
 }
