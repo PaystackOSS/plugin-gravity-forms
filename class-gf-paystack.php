@@ -442,24 +442,24 @@ class GFPaystack extends GFPaymentAddOn
 		$default_settings = parent::add_field_after('feedName', $fields, $default_settings);
 
 		// Add donation to transaction type drop down 
-		$transaction_type = parent::get_field('transactionType', $default_settings);
-		$choices          = $transaction_type['choices'];
-		$add_donation     = true;
+		// $transaction_type = parent::get_field('transactionType', $default_settings);
+		// $choices          = $transaction_type['choices'];
+		// $add_donation     = true;
 
-		foreach ($choices as $choice) {
-			// Add donation option if it does not already exist
-			if ($choice['value'] == 'donation') {
-				$add_donation = false;
-			}
-		}
+		// foreach ($choices as $choice) {
+		// 	// Add donation option if it does not already exist
+		// 	if ($choice['value'] == 'donation') {
+		// 		$add_donation = false;
+		// 	}
+		// }
 
-		if ($add_donation) {
-			// Add donation transaction type
-			$choices[] = array('label' => __('Donations', 'gravityformspaystack'), 'value' => 'donation');
-		}
+		// if ($add_donation) {
+		// 	// Add donation transaction type
+		// 	$choices[] = array('label' => __('Donations', 'gravityformspaystack'), 'value' => 'donation');
+		// }
 
-		$transaction_type['choices'] = $choices;
-		$default_settings = $this->replace_field('transactionType', $transaction_type, $default_settings);
+		// $transaction_type['choices'] = $choices;
+		// $default_settings = $this->replace_field('transactionType', $transaction_type, $default_settings);
 
 		// Add send invoice field if the feed transaction type is a subscription.
 		if ($this->get_setting('transactionType') === 'subscription') {
