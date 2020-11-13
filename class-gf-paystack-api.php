@@ -5,9 +5,11 @@ if (!defined('ABSPATH')) {
 
 class GFPaystackApi
 {
-    private $plugin_name;
-    private $public_key;
-    private $secret_key;
+    public $plugin_name;
+    
+    protected $public_key;
+    
+    protected $secret_key;
 
     public function __construct($config)
     {
@@ -68,12 +70,14 @@ class GFPaystackApi
 
         if (is_wp_error($res)) {
             throw new Exception(sprintf(__('You had an HTTP error connecting to %s', 'gravityformspaystack'), $this->name));
-        } 
+        }
 
         $body = json_decode($res['body'], true);
-    
+
         if ($body !== null) {
-            if (isset($json_res['error']) || $body['status'] == false) {
+            error_log(__METHOD__ . '(): for ' . $uri . ' Paystack Request ' . print_r($arg_array, true) . ' Paystack Response => ' . print_r($body, true));
+
+            if (isset($body['error']) || $body['status'] == false) {
                 throw new Exception("{$body['message']}");
             } else {
                 return $body;
@@ -101,11 +105,8 @@ class GFPaystackApi
      */
     public function get_headers()
     {
-        return apply_filters(
-            'mepr_paystack_request_headers',
-            [
-                'Authorization' => "Bearer {$this->secret_key}",
-            ]
-        );
+        return apply_filters('gf_paystack_request_headers', [
+            'Authorization' => "Bearer {$this->secret_key}"
+        ]);
     }
 }
