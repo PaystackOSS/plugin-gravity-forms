@@ -928,6 +928,12 @@ class GFPaystack extends GFPaymentAddOn
 		// Get feed custom metadata
 		$custom_data = $this->get_paystack_meta_data($feed, $entry, $form);
 
+		$custom_data[] = [
+			'display_name' => 'Plugin Name',
+			'variable_name' => 'plugin_name',
+			'value' => $this->paystack_api->plugin_name
+		];
+
 		// Generate transaction reference
 		$reference = uniqid("gf-{$entry['id']}-");
 
@@ -1471,7 +1477,7 @@ class GFPaystack extends GFPaymentAddOn
 	 * @param array $entry
 	 * @param array $action
 	 */
-	public function post_payment_action ($entry, $action)
+	public function post_payment_action($entry, $action)
 	{
 		parent::post_payment_action($entry, $action);
 
@@ -1479,7 +1485,7 @@ class GFPaystack extends GFPaymentAddOn
 			$this->add_subscription_payment($entry, $action['add_subscription_payment']);
 		}
 	}
-	
+
 	/**
 	 * Retrieve the Paystack Event for the received webhook.
 	 *
@@ -1706,7 +1712,6 @@ class GFPaystack extends GFPaymentAddOn
 						'variable_name' => sanitize_title($meta['custom_key']),
 						'value' => $field_value,
 					];
-					
 				}
 			}
 

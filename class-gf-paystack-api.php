@@ -5,9 +5,11 @@ if (!defined('ABSPATH')) {
 
 class GFPaystackApi
 {
-    private $plugin_name;
-    private $public_key;
-    private $secret_key;
+    public $plugin_name;
+    
+    protected $public_key;
+    
+    protected $secret_key;
 
     public function __construct($config)
     {
