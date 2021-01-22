@@ -54,11 +54,17 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 == Changelog ==
 
+= 1.0.1 =
+* Added support for ZAR currency
+
 = 1.0.0 =
 * Initial Release
 
 
 == Upgrade Notice ==
+
+= 1.0.1 =
+* You should update to this version if you are a South African merchant on Paystack
 
 = 1.0.0 =
 * Initial Release
