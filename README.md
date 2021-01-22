@@ -5,7 +5,7 @@ Paystack Addon for Gravity Forms allows you to quickly and easily implement cred
 
 ## Pre-Requisites
 - Gravity Forms v2.4+
-- WordPress v3.8+
+- WordPress v5.1+
 - SSL Certificate Installed and - Configured
 - Download and install the add-on
 - A Paystack account
