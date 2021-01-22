@@ -54,10 +54,10 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 == Changelog ==
 
-= 1.0.1 =
+= 1.0.1 - JANUARY 22, 2021 =
 * Added support for ZAR currency
 
-= 1.0.0 =
+= 1.0.0 - JANUARY 21, 2021 =
 * Initial Release
 
 
