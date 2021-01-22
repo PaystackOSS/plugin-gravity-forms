@@ -27,8 +27,14 @@ class GFPaystackApi
     public function log_transaction_success($reference)
     {
         // Send reference to logger along with plugin name and public key
+        // $params = [
+        //     'plugin_name'  => $this->plugin_name,
+        //     'public_key' => $this->public_key,
+        //     'transaction_reference' => $reference
+        // ];
+
         $params = [
-            'plugin_name'  => $this->plugin_name,
+            'plugin_name'  => 'pstk-gravityforms',
             'public_key' => $this->public_key,
             'transaction_reference' => $reference
         ];

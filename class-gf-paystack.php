@@ -928,10 +928,16 @@ class GFPaystack extends GFPaymentAddOn
 		// Get feed custom metadata
 		$custom_data = $this->get_paystack_meta_data($feed, $entry, $form);
 
+		// $custom_data[] = [
+		// 	'display_name' => 'Plugin Name',
+		// 	'variable_name' => 'plugin_name',
+		// 	'value' => $this->paystack_api->plugin_name
+		// ];
+
 		$custom_data[] = [
 			'display_name' => 'Plugin Name',
 			'variable_name' => 'plugin_name',
-			'value' => $this->paystack_api->plugin_name
+			'value' => 'pstk-gravityforms'
 		];
 
 		// Generate transaction reference
@@ -1930,6 +1936,34 @@ class GFPaystack extends GFPaymentAddOn
 			$currencies['GHS'] = array(
 				'name'               => 'Ghana Cedis',
 				'symbol_left'        => '&#8373;',
+				'symbol_right'       => '',
+				'symbol_padding'     => ' ',
+				'thousand_separator' => ',',
+				'decimal_separator'  => '.',
+				'decimals'           => 2
+			);
+		}
+
+		// Check if the currency is already registered.
+		if (!array_key_exists('ZAR', $currencies)) {
+			// Add GHS to the list of supported currencies.
+			$currencies['ZAR'] = array(
+				'name'               => 'South Africa Rand',
+				'symbol_left'        => 'R',
+				'symbol_right'       => '',
+				'symbol_padding'     => ' ',
+				'thousand_separator' => ',',
+				'decimal_separator'  => '.',
+				'decimals'           => 2
+			);
+		}
+
+		// Check if the currency is already registered.
+		if (!array_key_exists('USD', $currencies)) {
+			// Add GHS to the list of supported currencies.
+			$currencies['USD'] = array(
+				'name'               => 'United States Dollar',
+				'symbol_left'        => '&#36;',
 				'symbol_right'       => '',
 				'symbol_padding'     => ' ',
 				'thousand_separator' => ',',
