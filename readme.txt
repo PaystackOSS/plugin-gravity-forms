@@ -3,9 +3,9 @@ Contributors: webong, paystack
 Donate link: https://paystack.com/demo
 Tags: payments, subscriptions, gravityforms
 Requires at least: 5.1
-Tested up to: 5.6
+Tested up to: 5.8
 Requires PHP: 7.2
-Stable tag: 1.0.1
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -54,6 +54,9 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 == Changelog ==
 
+= 1.0.2 - NOVEMBER 1, 2021 =
+* Added support for KES currency
+
 = 1.0.1 - JANUARY 22, 2021 =
 * Added support for ZAR currency
 
@@ -62,6 +65,9 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 
 == Upgrade Notice ==
+
+= 1.0.2 =
+* You should update to this version if you are a Kenyan merchant on Paystack
 
 = 1.0.1 =
 * You should update to this version if you are a South African merchant on Paystack

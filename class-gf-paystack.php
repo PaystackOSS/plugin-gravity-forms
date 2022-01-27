@@ -1946,7 +1946,7 @@ class GFPaystack extends GFPaymentAddOn
 
 		// Check if the currency is already registered.
 		if (!array_key_exists('ZAR', $currencies)) {
-			// Add GHS to the list of supported currencies.
+			// Add ZAR to the list of supported currencies.
 			$currencies['ZAR'] = array(
 				'name'               => 'South Africa Rand',
 				'symbol_left'        => 'R',
@@ -1960,10 +1960,24 @@ class GFPaystack extends GFPaymentAddOn
 
 		// Check if the currency is already registered.
 		if (!array_key_exists('USD', $currencies)) {
-			// Add GHS to the list of supported currencies.
+			// Add USD to the list of supported currencies.
 			$currencies['USD'] = array(
 				'name'               => 'United States Dollar',
 				'symbol_left'        => '&#36;',
+				'symbol_right'       => '',
+				'symbol_padding'     => ' ',
+				'thousand_separator' => ',',
+				'decimal_separator'  => '.',
+				'decimals'           => 2
+			);
+		}
+
+		// Check if the currency is already registered.
+		if (!array_key_exists('KES', $currencies)) {
+			// Add KES to the list of supported currencies.
+			$currencies['KES'] = array(
+				'name'               => 'Kenyan Shillings',
+				'symbol_left'        => 'KSh',
 				'symbol_right'       => '',
 				'symbol_padding'     => ' ',
 				'thousand_separator' => ',',
