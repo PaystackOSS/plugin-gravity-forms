@@ -3,9 +3,9 @@ Contributors: webong, paystack
 Donate link: https://paystack.com/demo
 Tags: payments, subscriptions, gravityforms
 Requires at least: 5.1
-Tested up to: 5.8
-Requires PHP: 7.2
-Stable tag: 1.0.2
+Tested up to: 5.9
+Requires PHP: 7.2 and higher
+Stable tag: 2.0.0
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -53,6 +53,9 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 
 == Changelog ==
+
+= 2.0.0 - NOVEMBER 1, 2021 =
+* Compatibility with WordPress v5.9 and PHP 8
 
 = 1.0.2 - NOVEMBER 1, 2021 =
 * Added support for KES currency
