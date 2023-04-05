@@ -1926,7 +1926,8 @@ class GFPaystack extends GFPaymentAddOn
 				'symbol_padding'     => ' ',
 				'thousand_separator' => ',',
 				'decimal_separator'  => '.',
-				'decimals'           => 2
+				'decimals'           => 2,
+				'code'				 => 'NGN'
 			);
 		}
 
@@ -1940,7 +1941,8 @@ class GFPaystack extends GFPaymentAddOn
 				'symbol_padding'     => ' ',
 				'thousand_separator' => ',',
 				'decimal_separator'  => '.',
-				'decimals'           => 2
+				'decimals'           => 2,
+				'code'				 => 'GHS'
 			);
 		}
 
@@ -1954,24 +1956,12 @@ class GFPaystack extends GFPaymentAddOn
 				'symbol_padding'     => ' ',
 				'thousand_separator' => ',',
 				'decimal_separator'  => '.',
-				'decimals'           => 2
+				'decimals'           => 2,
+				'code'				 => 'ZAR'
 			);
 		}
 
-		// Check if the currency is already registered.
-		if (!array_key_exists('USD', $currencies)) {
-			// Add USD to the list of supported currencies.
-			$currencies['USD'] = array(
-				'name'               => 'United States Dollar',
-				'symbol_left'        => '&#36;',
-				'symbol_right'       => '',
-				'symbol_padding'     => ' ',
-				'thousand_separator' => ',',
-				'decimal_separator'  => '.',
-				'decimals'           => 2
-			);
-		}
-
+	
 		// Check if the currency is already registered.
 		if (!array_key_exists('KES', $currencies)) {
 			// Add KES to the list of supported currencies.
@@ -1982,7 +1972,8 @@ class GFPaystack extends GFPaymentAddOn
 				'symbol_padding'     => ' ',
 				'thousand_separator' => ',',
 				'decimal_separator'  => '.',
-				'decimals'           => 2
+				'decimals'           => 2,
+				'code'				 => 'KES'
 			);
 		}
 
