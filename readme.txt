@@ -3,9 +3,11 @@ Contributors: webong, paystack
 Donate link: https://paystack.com/demo
 Tags: payments, subscriptions, gravityforms
 Requires at least: 5.1
-Tested up to: 5.9
+
+Tested up to: 6.2
 Requires PHP: 7.2 and higher
-Stable tag: 2.0.0
+Stable tag: 2.0.1
+
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -54,6 +56,10 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 == Changelog ==
 
+= 2.0.1 - APRIL 14, 2022 =
+* Test plugin up to WordPress 6.2
+* Fix PHP warnings about missing currency code
+
 = 2.0.0 - NOVEMBER 1, 2021 =
 * Compatibility with WordPress v5.9 and PHP 8
 
@@ -68,6 +74,10 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 
 == Upgrade Notice ==
+= 1.0.2 =
+* Test plugin up to WordPress 6.2
+* Fix PHP warnings about missing currency code
+
 
 = 1.0.2 =
 * You should update to this version if you are a Kenyan merchant on Paystack
