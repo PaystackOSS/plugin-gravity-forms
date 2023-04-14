@@ -15,7 +15,7 @@ jobs:
         env:
           SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
           SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
-          SLUG: your-plugin-slug
+          SLUG: paystack-add-on-for-gravity-forms
         run: |
           echo "Preparing to deploy to WordPress.org..."
           svn co "https://plugins.svn.wordpress.org/${SLUG}/" --username "${SVN_USERNAME}" --password "${SVN_PASSWORD}" svn
