@@ -1,0 +1,40 @@
+name: Deploy to WordPress.org
+on:
+  release:
+    types: [published]
+jobs:
+  tag:
+    name: New release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Set up SVN
+        run: sudo apt-get install -y subversion
+      - name: Deploy to WordPress.org
+        env:
+          SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+          SLUG: your-plugin-slug
+        run: |
+          echo "Preparing to deploy to WordPress.org..."
+          svn co "https://plugins.svn.wordpress.org/${SLUG}/" --username "${SVN_USERNAME}" --password "${SVN_PASSWORD}" svn
+
+          echo "Clearing the trunk folder..."
+          rm -rf svn/trunk/*
+          cp -R ./* svn/trunk/
+
+          echo "Adding new files to SVN..."
+          cd svn/trunk/
+          svn add --force * --auto-props --parents --depth infinity -q
+
+          echo "Setting SVN props..."
+          svn propset svn:ignore -F .svnignore .
+
+          echo "Removing deleted files from SVN..."
+          svn status | grep '^!' | awk '{print $2}' | xargs -I% svn rm %
+
+          echo "Committing to WordPress.org..."
+          svn commit -m "Deploying version ${GITHUB_REF:10}" --username "${SVN_USERNAME}" --password "${SVN_PASSWORD}" --no-auth-cache
+
+          echo "Deployment completed!"
