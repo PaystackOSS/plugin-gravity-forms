@@ -2,6 +2,7 @@
 /*
 Plugin Name: Paystack Add-On for Gravity Forms 
 Plugin URI: https://paystack.com/docs/libraries-and-plugins/plugins#wordpress
+0
 Description: Integrates Gravity Forms with Paystack, enabling customers to pay for goods and services through Gravity Forms.
 Version: 1.0.2
 Author: Paystack
