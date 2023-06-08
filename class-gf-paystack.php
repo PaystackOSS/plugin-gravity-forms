@@ -1995,13 +1995,27 @@ class GFPaystack extends GFPaymentAddOn
 			// Add KES to the list of supported currencies.
 			$currencies['EGP'] = array(
 				'name'               => 'Egyptian Pound',
-				'symbol_left'        => 'EGP',
+				'symbol_left'        => '&#163;',
 				'symbol_right'       => '',
 				'symbol_padding'     => ' ',
 				'thousand_separator' => ',',
 				'decimal_separator'  => '.',
 				'decimals'           => 2,
 				'code'				 => 'EGP'
+			);
+		}
+		// Check if the currency is already registered.
+		if (!array_key_exists('USD', $currencies)) {
+			// Add KES to the list of supported currencies.
+			$currencies['USD'] = array(
+				'name'               => 'US Dollars',
+				'symbol_left'        => '&#36;',
+				'symbol_right'       => '',
+				'symbol_padding'     => ' ',
+				'thousand_separator' => ',',
+				'decimal_separator'  => '.',
+				'decimals'           => 2,
+				'code'				 => 'USD'
 			);
 		}
 
