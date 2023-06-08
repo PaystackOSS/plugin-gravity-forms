@@ -1976,6 +1976,34 @@ class GFPaystack extends GFPaymentAddOn
 				'code'				 => 'KES'
 			);
 		}
+		// Check if the currency is already registered.
+		if (!array_key_exists('XOF', $currencies)) {
+			// Add KES to the list of supported currencies.
+			$currencies['XOF'] = array(
+				'name'               => 'West African CFA Franc',
+				'symbol_left'        => 'CFA',
+				'symbol_right'       => '',
+				'symbol_padding'     => ' ',
+				'thousand_separator' => ',',
+				'decimal_separator'  => '.',
+				'decimals'           => 2,
+				'code'				 => 'XOF'
+			);
+		}
+		// Check if the currency is already registered.
+		if (!array_key_exists('EGP', $currencies)) {
+			// Add KES to the list of supported currencies.
+			$currencies['EGP'] = array(
+				'name'               => 'Egyptian Pound',
+				'symbol_left'        => 'EGP',
+				'symbol_right'       => '',
+				'symbol_padding'     => ' ',
+				'thousand_separator' => ',',
+				'decimal_separator'  => '.',
+				'decimals'           => 2,
+				'code'				 => 'EGP'
+			);
+		}
 
 		return $currencies;
 	}
