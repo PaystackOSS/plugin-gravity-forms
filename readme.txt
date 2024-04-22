@@ -56,6 +56,9 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 == Changelog ==
 
+= 2.0.3 - SEPTMBER 26, 2023 =
+* Added XOF and EGP to the currency list
+
 = 2.0.2 - SEPTMBER 26, 2023 =
 * Compatibility with WordPress v6.2 and PHP 8
 
