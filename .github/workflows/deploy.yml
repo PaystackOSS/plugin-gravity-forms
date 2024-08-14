@@ -9,32 +9,21 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-      - name: Set up SVN
-        run: sudo apt-get install -y subversion
-      - name: Deploy to WordPress.org
+      - name: WordPress Plugin Deploy
+        id: deploy
+        uses: 10up/action-wordpress-plugin-deploy@stable
+        with:
+          generate-zip: true
         env:
           SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
           SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
           SLUG: paystack-add-on-for-gravity-forms
-        run: |
-          echo "Preparing to deploy to WordPress.org..."
-          svn co "https://plugins.svn.wordpress.org/${SLUG}/" --username "${SVN_USERNAME}" --password "${SVN_PASSWORD}" svn
-
-          echo "Clearing the trunk folder..."
-          rm -rf svn/trunk/*
-          cp -R ./* svn/trunk/
-
-          echo "Adding new files to SVN..."
-          cd svn/trunk/
-          svn add --force * --auto-props --parents --depth infinity -q
-
-          echo "Setting SVN props..."
-          svn propset svn:ignore -F .svnignore .
-
-          echo "Removing deleted files from SVN..."
-          svn status | grep '^!' | awk '{print $2}' | xargs -I% svn rm %
-
-          echo "Committing to WordPress.org..."
-          svn commit -m "Deploying version ${GITHUB_REF:10}" --username "${SVN_USERNAME}" --password "${SVN_PASSWORD}" --no-auth-cache
-
-          echo "Deployment completed!"
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ steps.deploy.outputs.zip-path }}
+          asset_name: ${{ github.event.repository.name }}.zip
+          asset_content_type: application/zip
