@@ -1,12 +1,12 @@
 === Paystack Add-On for Gravity Forms ===
-Contributors: webong, paystack, kaneahabagale
+Contributors: webong, paystack, kaneahabagale, 
 Donate link: https://paystack.com/demo
 Tags: payments, subscriptions, gravityforms
 Requires at least: 5.1
 
-Tested up to: 6.2
+Tested up to: 6.6
 Requires PHP: 7.2 and higher
-Stable tag: 2.1.0
+Stable tag: 2.0.4
 
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
@@ -56,7 +56,13 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 == Changelog ==
 
-= 2.1.0 - SEPTMBER 26, 2023 =
+= 2.0.4 - AUGUST 8, 2024 =
+* Compatibility with WordPress v6.6 and PHP 8.2
+
+= 2.0.3 - SEPTMBER 26, 2023 =
+* Added XOF and EGP to the currency list
+
+= 2.0.2 - SEPTMBER 26, 2023 =
 * Compatibility with WordPress v6.2 and PHP 8
 
 = 2.0.1 - APRIL 14, 2022 =
@@ -78,7 +84,10 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 == Upgrade Notice ==
 
-= 1.1.0 =
+= 2.0.3 =
+* Compatibility with WordPress v6.6 and PHP 8.2
+
+= 2.0.2 =
 * Compatibility with WordPress v6.2 and PHP 8
 
 = 1.0.2 =
