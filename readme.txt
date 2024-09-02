@@ -6,7 +6,7 @@ Requires at least: 5.1
 
 Tested up to: 6.6
 Requires PHP: 7.2 and higher
-Stable tag: 2.0.4
+Stable tag: 2.0.6
 
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
@@ -56,7 +56,7 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 == Changelog ==
 
-= 2.0.4 - AUGUST 8, 2024 =
+= 2.0.6 - AUGUST 8, 2024 =
 * Compatibility with WordPress v6.6 and PHP 8.2
 
 = 2.0.3 - SEPTMBER 26, 2023 =
@@ -84,7 +84,7 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 == Upgrade Notice ==
 
-= 2.0.3 =
+= 2.0.6 =
 * Compatibility with WordPress v6.6 and PHP 8.2
 
 = 2.0.2 =
