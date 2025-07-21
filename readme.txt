@@ -4,9 +4,9 @@ Donate link: https://paystack.com/demo
 Tags: payments, subscriptions, gravityforms
 Requires at least: 5.1
 
-Tested up to: 6.6
+Tested up to: 6.8.1
 Requires PHP: 7.2 and higher
-Stable tag: 2.0.6
+Stable tag: 2.0.7
 
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
@@ -56,6 +56,9 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 == Changelog ==
 
+= 2.0.7 - July 21, 2025 =
+* Compatibility with WordPress v6.8.1 and PHP 8.2.23
+
 = 2.0.6 - AUGUST 8, 2024 =
 * Compatibility with WordPress v6.6 and PHP 8.2
 
@@ -83,6 +86,9 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 
 == Upgrade Notice ==
+
+= 2.0.7 - July 21, 2025 =
+* Compatibility with WordPress v6.8.1 and PHP 8.2.23
 
 = 2.0.6 =
 * Compatibility with WordPress v6.6 and PHP 8.2
