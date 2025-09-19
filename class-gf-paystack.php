@@ -980,7 +980,8 @@ class GFPaystack extends GFPaymentAddOn
             $submitted_recurring_times = rgar($submission_data, 'recurring_times');
             $invoice_limit = !empty($submitted_recurring_times) && $submitted_recurring_times !== '1' ? $submitted_recurring_times : null;
 
-            if (!empty($invoice_limit) || $invoice_limit !== 'Infinite') {
+            // If invoice limit is not null and not infinite, set it in the args
+            if (!empty($invoice_limit) && $invoice_limit !== 'Infinite') {
                 $args['invoice_limit'] = (int) $invoice_limit;
             }
 
