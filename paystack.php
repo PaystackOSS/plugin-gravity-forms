@@ -32,11 +32,21 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 defined('ABSPATH') || die();
 
 define('GF_PAYSTACK_VERSION', '2.0.6');
+define('GF_PAYSTACK_MIN_GF_VERSION', '2.0');
 
+// Register the addon - only runs if Gravity Forms is loaded
 add_action('gform_loaded', array('GF_Paystack_Bootstrap', 'load'), 5);
+
+// Show admin notice if Gravity Forms is not active
+add_action('admin_notices', array('GF_Paystack_Bootstrap', 'admin_notice'));
 
 class GF_Paystack_Bootstrap
 {
+	/**
+	 * Load the add-on if Gravity Forms is available.
+	 *
+	 * @return void
+	 */
 	public static function load()
 	{
 		if (!method_exists('GFForms', 'include_payment_addon_framework')) {
@@ -44,14 +54,53 @@ class GF_Paystack_Bootstrap
 		}
 
 		require_once('class-gf-paystack.php');
-
 		require_once('class-gf-paystack-api.php');
 
 		GFAddOn::register('GFPaystack');
 	}
+
+	/**
+	 * Display admin notice if Gravity Forms is not active.
+	 *
+	 * @return void
+	 */
+	public static function admin_notice()
+	{
+		// Only show on plugins page or dashboard
+		$screen = get_current_screen();
+		if (!$screen || !in_array($screen->id, array('plugins', 'plugins-network', 'dashboard'))) {
+			return;
+		}
+
+		// Check if Gravity Forms is active
+		if (!class_exists('GFForms')) {
+			printf(
+				'<div class="notice notice-error"><p><strong>Paystack for Gravity Forms</strong> requires Gravity Forms to be installed and active. <a href="%s" target="_blank" rel="noopener noreferrer">Get Gravity Forms</a></p></div>',
+				esc_url('https://www.gravityforms.com/')
+			);
+			return;
+		}
+
+		// Check if minimum version requirement is met
+		if (method_exists('GFForms', 'version') && version_compare(GFForms::version(), GF_PAYSTACK_MIN_GF_VERSION, '<')) {
+			printf(
+				'<div class="notice notice-error"><p><strong>Paystack for Gravity Forms</strong> requires Gravity Forms %s or higher. Please update Gravity Forms.</p></div>',
+				esc_html(GF_PAYSTACK_MIN_GF_VERSION)
+			);
+			return;
+		}
+	}
 }
 
+/**
+ * Returns an instance of the GFPaystack class.
+ *
+ * @return GFPaystack|false
+ */
 function gf_paystack()
 {
+	if (!class_exists('GFPaystack')) {
+		return false;
+	}
 	return GFPaystack::get_instance();
 }

@@ -1,7 +1,14 @@
 <?php
-if (!defined('ABSPATH')) {
-    die('You are not allowed to call this page directly.');
-}
+/**
+ * Paystack API Class for Gravity Forms
+ *
+ * @package     GF_Paystack
+ * @author      Paystack
+ * @copyright   2020 Paystack
+ * @license     GPL-2.0+
+ */
+
+defined('ABSPATH') || die();
 
 class GFPaystackApi
 {
@@ -27,12 +34,6 @@ class GFPaystackApi
     public function log_transaction_success($reference)
     {
         // Send reference to logger along with plugin name and public key
-        // $params = [
-        //     'plugin_name'  => $this->plugin_name,
-        //     'public_key' => $this->public_key,
-        //     'transaction_reference' => $reference
-        // ];
-
         $params = [
             'plugin_name'  => 'pstk-gravityforms',
             'public_key' => $this->public_key,
@@ -55,7 +56,8 @@ class GFPaystackApi
      * @param string $method API request method
      * @param string $domain API request uri
      * 
-     * @return object|null JSON decoded transaction object. NULL on API error.
+     * @return array JSON decoded transaction object.
+     * @throws Exception on API error.
      */
     public function send_request(
         $endpoint,
@@ -91,19 +93,27 @@ class GFPaystackApi
         } else { // Un-decipherable message
             throw new Exception(sprintf(__('There was an issue connecting with the payment processor. Try again later.', 'gravityformspaystack'), $this->name));
         }
-
-        return false;
     }
 
     /**
      * Validate Webhook Signature
      *
-     * @param $input
-     * @return boolean
+     * Uses hash_equals() for timing-safe comparison to prevent timing attacks.
+     *
+     * @param string $input Raw request body
+     * @return boolean True if signature is valid, false otherwise
      */
     public function validate_webhook($input)
     {
-        return $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] == hash_hmac('sha512', $input, $this->secret_key);
+        $signature = isset($_SERVER['HTTP_X_PAYSTACK_SIGNATURE']) ? $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] : '';
+        
+        if (empty($signature)) {
+            return false;
+        }
+        
+        $expected = hash_hmac('sha512', $input, $this->secret_key);
+        
+        return hash_equals($expected, $signature);
     }
 
     /**
