@@ -33,6 +33,10 @@ defined('ABSPATH') || die();
 
 define('GF_PAYSTACK_VERSION', '2.0.6');
 
+require_once __DIR__ . '/includes/php-advisory.php';
+add_action('admin_notices', 'gf_paystack_php_advisory_notice');
+add_action('network_admin_notices', 'gf_paystack_php_advisory_notice');
+
 add_action('gform_loaded', array('GF_Paystack_Bootstrap', 'load'), 5);
 
 class GF_Paystack_Bootstrap
