@@ -6,6 +6,7 @@ if (PHP_SAPI !== 'cli') {
 define('ABSPATH', dirname(__DIR__) . '/');
 
 require __DIR__ . '/stubs.php';
+require __DIR__ . '/fixtures.php';
 
 $GLOBALS['gf_paystack_test_passed'] = 0;
 $GLOBALS['gf_paystack_test_failed'] = 0;

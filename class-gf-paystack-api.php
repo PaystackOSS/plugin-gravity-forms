@@ -69,19 +69,19 @@ class GFPaystackApi
             'method'    => strtoupper($method),
             'body'      => $args,
             'timeout'   => 15,
-            'headers'   => $this->get_headers()
+            'headers'   => $domain === 'https://api.paystack.co/' ? $this->get_headers() : array()
         );
 
         $res = wp_remote_request($uri, $arg_array);
 
         if (is_wp_error($res)) {
-            throw new Exception(sprintf(__('You had an HTTP error connecting to %s', 'gravityformspaystack'), $this->name));
+            throw new Exception(sprintf(__('You had an HTTP error connecting to %s', 'gravityformspaystack'), $this->plugin_name));
         }
 
         $body = json_decode($res['body'], true);
 
         if ($body !== null) {
-            error_log(__METHOD__ . '(): for ' . $uri . ' Paystack Request ' . print_r($arg_array, true) . ' Paystack Response => ' . print_r($body, true));
+            error_log(__METHOD__ . '(): ' . strtoupper($method) . ' ' . $uri . ' status: ' . (isset($body['status']) ? var_export($body['status'], true) : 'unknown'));
 
             if (isset($body['error']) || $body['status'] == false) {
                 throw new Exception("{$body['message']}");
@@ -89,21 +89,40 @@ class GFPaystackApi
                 return $body;
             }
         } else { // Un-decipherable message
-            throw new Exception(sprintf(__('There was an issue connecting with the payment processor. Try again later.', 'gravityformspaystack'), $this->name));
+            throw new Exception(sprintf(__('There was an issue connecting with the payment processor. Try again later.', 'gravityformspaystack'), $this->plugin_name));
         }
 
         return false;
     }
 
     /**
+     * @param string $reference
+     *
+     * @return object|null
+     */
+    public function verify_transaction($reference)
+    {
+        return $this->send_request('transaction/verify/' . rawurlencode($reference), array(), 'get');
+    }
+
+    /**
      * Validate Webhook Signature
      *
      * @param $input
+     * @param string|null $signature Defaults to the request's signature header.
      * @return boolean
      */
-    public function validate_webhook($input)
+    public function validate_webhook($input, $signature = null)
     {
-        return $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] == hash_hmac('sha512', $input, $this->secret_key);
+        if ($signature === null) {
+            $signature = isset($_SERVER['HTTP_X_PAYSTACK_SIGNATURE']) ? $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] : '';
+        }
+
+        if (!is_string($signature) || $signature === '' || !is_string($this->secret_key) || trim($this->secret_key) === '') {
+            return false;
+        }
+
+        return hash_equals(hash_hmac('sha512', (string) $input, $this->secret_key), $signature);
     }
 
     /**
