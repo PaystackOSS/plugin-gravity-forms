@@ -171,7 +171,7 @@ function gf_paystack_exception_message($callback)
 {
     try {
         $callback();
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
         return $e->getMessage();
     }
 

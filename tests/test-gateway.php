@@ -118,3 +118,26 @@ $GLOBALS['gf_paystack_test_remote_response'] = array('body' => json_encode(array
 $log_api->log_transaction_success('gf-7-abc');
 $tracker_call = $GLOBALS['gf_paystack_test_remote_calls'][0];
 gf_paystack_test_check(strpos($tracker_call[0], 'plugin-tracker') !== false && !isset($tracker_call[1]['headers']['Authorization']), 'send_request headers case 1');
+
+$GLOBALS['gf_paystack_test_remote_response'] = array('response' => array('code' => 530), 'body' => 'error code: 1016');
+$tracker_thrown = gf_paystack_exception_message(function () use ($log_api) {
+    $log_api->log_transaction_success('gf-7-abc');
+});
+gf_paystack_test_check($tracker_thrown === '', 'log_transaction_success case 1: non-JSON tracker response does not throw');
+
+$GLOBALS['gf_paystack_test_remote_response'] = new WP_Error('http_request_failed', 'cURL error 6: Could not resolve host');
+$tracker_thrown = gf_paystack_exception_message(function () use ($log_api) {
+    $log_api->log_transaction_success('gf-7-abc');
+});
+gf_paystack_test_check($tracker_thrown === '', 'log_transaction_success case 2: tracker transport error does not throw');
+
+$GLOBALS['gf_paystack_test_remote_response'] = array('body' => json_encode('error'));
+$tracker_thrown = gf_paystack_exception_message(function () use ($log_api) {
+    $log_api->log_transaction_success('gf-7-abc');
+});
+gf_paystack_test_check($tracker_thrown === '', 'log_transaction_success case 3: JSON scalar tracker response does not throw');
+$scalar_thrown = gf_paystack_exception_message(function () use ($log_api) {
+    $log_api->send_request('transaction/verify/abc', array(), 'get');
+});
+gf_paystack_test_check(strpos($scalar_thrown, 'issue connecting') !== false, 'send_request case: JSON scalar response throws the generic Exception');
+$GLOBALS['gf_paystack_test_remote_response'] = array('body' => json_encode(array('status' => true)));
