@@ -5,7 +5,7 @@ Tags: payments, subscriptions, gravityforms
 Requires at least: 5.1
 Tested up to: 7.1
 Requires PHP: 7.2
-Stable tag: 2.0.8
+Stable tag: 2.0.9
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -54,6 +54,9 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 == Changelog ==
 
+= 2.0.9 - October 28, 2026 =
+* Fixed a fatal error on the confirmation page after a successful payment when the usage tracking service is unreachable.
+
 = 2.0.8 - October 27, 2026 =
 * Security: hardened webhook and payment verification. Props k2sobot.
 * Security: API credentials and response bodies are no longer written to the PHP error log, and the API secret key is only sent to the Paystack API.
@@ -91,6 +94,9 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 
 == Upgrade Notice ==
+
+= 2.0.9 =
+* Fixes a fatal error customers could see after paying. Please update.
 
 = 2.0.8 =
 * Security update — please update now. After updating, rotate your live and test secret keys in the Paystack Dashboard and delete old PHP and WordPress debug log files, as earlier versions logged API request details. Ask your host to run PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12 or later.
