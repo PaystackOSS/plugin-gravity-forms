@@ -39,12 +39,17 @@ class GFPaystackApi
             'transaction_reference' => $reference
         ];
 
-        $this->send_request(
-            'log/charge_success',
-            $params,
-            'post',
-            'https://plugin-tracker.paystackintegrations.com/'
-        );
+        // Usage tracking must never block a paid customer from reaching the confirmation page.
+        try {
+            $this->send_request(
+                'log/charge_success',
+                $params,
+                'post',
+                'https://plugin-tracker.paystackintegrations.com/'
+            );
+        } catch (\Throwable $e) {
+            error_log(__METHOD__ . '(): plugin tracker request failed: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -80,7 +85,7 @@ class GFPaystackApi
 
         $body = json_decode($res['body'], true);
 
-        if ($body !== null) {
+        if (is_array($body)) {
             error_log(__METHOD__ . '(): ' . strtoupper($method) . ' ' . $uri . ' status: ' . (isset($body['status']) ? var_export($body['status'], true) : 'unknown'));
 
             if (isset($body['error']) || $body['status'] == false) {
