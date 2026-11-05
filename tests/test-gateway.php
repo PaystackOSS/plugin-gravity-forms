@@ -70,6 +70,22 @@ $event_result = $event_addon->get_webhook_event();
 gf_paystack_test_check($event_addon->webhook_mode_value() === 'live' && $event_result !== false, 'get_webhook_event case 3');
 
 
+$event_addon->settings = array('api_mode' => 'live', 'live_secret_key' => 'rk_live_a', 'live_webhook_secret' => 'whsec_live', 'test_webhook_secret' => 'whsec_test');
+$whsec_t = time();
+$_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] = hash_hmac('sha512', '', 'rk_live_a');
+$event_result = $event_addon->get_webhook_event();
+gf_paystack_test_check($event_result === false, 'get_webhook_event signing secret case 1');
+
+$_SERVER['HTTP_PAYSTACK_SIGNATURE'] = "t=$whsec_t,v1=whk_1:" . hash_hmac('sha512', "$whsec_t.", 'whsec_live');
+$event_result = $event_addon->get_webhook_event();
+gf_paystack_test_check($event_addon->webhook_mode_value() === 'live' && $event_result !== false && !is_wp_error($event_result), 'get_webhook_event signing secret case 2');
+
+$_SERVER['HTTP_PAYSTACK_SIGNATURE'] = "t=$whsec_t,v1=whk_1:" . hash_hmac('sha512', "$whsec_t.", 'whsec_test');
+$event_result = $event_addon->get_webhook_event();
+gf_paystack_test_check($event_result === false, 'get_webhook_event signing secret case 3');
+unset($_SERVER['HTTP_PAYSTACK_SIGNATURE']);
+$event_addon->settings = $event_settings;
+
 foreach (array('foo', array('live')) as $domain) {
     $seam_body = json_encode(array('event' => 'charge.success', 'data' => array('domain' => $domain)));
     $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] = hash_hmac('sha512', $seam_body, 'sk_test_b');
