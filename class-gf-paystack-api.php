@@ -11,10 +11,13 @@ class GFPaystackApi
     
     protected $secret_key;
 
+    protected $webhook_secret;
+
     public function __construct($config)
     {
         $this->plugin_name = 'Paystack Addon for Gravity Forms';
         $this->secret_key = $config->secret_key ?? '';
+        $this->webhook_secret = $config->webhook_secret ?? '';
         $this->public_key = $config->public_key ?? '';
     }
 
@@ -113,21 +116,72 @@ class GFPaystackApi
     /**
      * Validate Webhook Signature
      *
-     * @param $input
-     * @param string|null $signature Defaults to the request's signature header.
+     * Uses the Paystack-Signature header when a webhook signing secret is set,
+     * otherwise the X-Paystack-Signature header, which only a secret key (sk_) can verify.
+     *
+     * @param $input Raw request body
+     * @param string|null $signature X-Paystack-Signature. Defaults to the request's header.
+     * @param string|null $paystack_signature Paystack-Signature. Defaults to the request's header.
      * @return boolean
      */
-    public function validate_webhook($input, $signature = null)
+    public function validate_webhook($input, $signature = null, $paystack_signature = null)
     {
+        if ($paystack_signature === null) {
+            $paystack_signature = isset($_SERVER['HTTP_PAYSTACK_SIGNATURE']) ? $_SERVER['HTTP_PAYSTACK_SIGNATURE'] : '';
+        }
+
+        if (is_string($this->webhook_secret) && $this->webhook_secret !== '' && is_string($paystack_signature) && $paystack_signature !== '') {
+            return self::verify_signature($paystack_signature, (string) $input, $this->webhook_secret, time());
+        }
+
         if ($signature === null) {
             $signature = isset($_SERVER['HTTP_X_PAYSTACK_SIGNATURE']) ? $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] : '';
         }
 
-        if (!is_string($signature) || $signature === '' || !is_string($this->secret_key) || trim($this->secret_key) === '') {
+        if (!is_string($signature) || $signature === '' || !is_string($this->secret_key) || strpos($this->secret_key, 'sk_') !== 0) {
             return false;
         }
 
         return hash_equals(hash_hmac('sha512', (string) $input, $this->secret_key), $signature);
+    }
+
+    /**
+     * Verify a Paystack-Signature header: t=<unix seconds>,v1=<key id>:<hex>[,v1=...]
+     *
+     * @param string $header
+     * @param string $body Raw request body
+     * @param string $secret Webhook signing secret (whsec_...)
+     * @param int $now
+     * @return boolean
+     */
+    public static function verify_signature($header, $body, $secret, $now)
+    {
+        $timestamp = '';
+        $signatures = array();
+        foreach (explode(',', $header) as $part) {
+            $pair = explode('=', trim($part), 2);
+            if (count($pair) !== 2) {
+                continue;
+            }
+            if ($pair[0] === 't') {
+                $timestamp = $pair[1];
+            } elseif ($pair[0] === 'v1' && strpos($pair[1], ':') !== false) {
+                $signatures[] = substr($pair[1], strpos($pair[1], ':') + 1);
+            }
+        }
+
+        if (!preg_match('/^\d+$/', $timestamp) || abs($now - (int) $timestamp) > 300) {
+            return false;
+        }
+
+        $expected = hash_hmac('sha512', $timestamp . '.' . $body, $secret);
+        foreach ($signatures as $signature) {
+            if (hash_equals($expected, $signature)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

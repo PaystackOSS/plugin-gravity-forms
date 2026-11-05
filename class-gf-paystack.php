@@ -326,6 +326,13 @@ class GFPaystack extends GFPaymentAddOn
         'class'    => 'medium',
         ),
         array(
+        'name'  => 'test_webhook_secret',
+        'label' => esc_html__('Test Webhook Signing Secret', 'gravityformspaystack'),
+        'type'  => 'text',
+        'class'    => 'medium',
+        'description' => esc_html__('Find it in your Paystack Dashboard under Settings > API Keys & Webhooks. Required if you use a restricted key (rk_).', 'gravityformspaystack'),
+        ),
+        array(
         'name'  => 'live_public_key',
         'label' => esc_html__('Live Public Key', 'gravityformspaystack'),
         'type'  => 'text',
@@ -336,6 +343,13 @@ class GFPaystack extends GFPaymentAddOn
         'label' => esc_html__('Live Secret Key', 'gravityformspaystack'),
         'type'  => 'text',
         'class'    => 'medium',
+        ),
+        array(
+        'name'  => 'live_webhook_secret',
+        'label' => esc_html__('Live Webhook Signing Secret', 'gravityformspaystack'),
+        'type'  => 'text',
+        'class'    => 'medium',
+        'description' => esc_html__('Find it in your Paystack Dashboard under Settings > API Keys & Webhooks. Required if you use a restricted key (rk_).', 'gravityformspaystack'),
         ),
         );
 
@@ -1943,7 +1957,8 @@ class GFPaystack extends GFPaymentAddOn
 
         $config = (object) array(
         'secret_key' => $this->get_secret_api_key($mode, $settings),
-        'public_key' => $this->get_public_api_key($mode, $settings)
+        'public_key' => $this->get_public_api_key($mode, $settings),
+        'webhook_secret' => trim($this->get_setting("{$mode}_webhook_secret", '', $settings))
         );
 
         $this->log_debug(sprintf('%s(): Initializing Paystack API for %s mode.', __METHOD__, $mode));

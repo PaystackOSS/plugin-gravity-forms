@@ -22,6 +22,38 @@ gf_paystack_test_check($empty_secret_api->validate_webhook($webhook_body, hash_h
 $blank_secret_api = new GFPaystackApi((object) array('secret_key' => '  ', 'public_key' => 'pk'));
 gf_paystack_test_check($blank_secret_api->validate_webhook($webhook_body, hash_hmac('sha512', $webhook_body, '  ')) === false, 'validate_webhook case 8');
 
+$whsec = 'whsec_' . str_repeat('a', 64);
+$vector_body = '{"event":"charge.success","data":{"reference":"ref_123"}}';
+$vector_hex = 'f44df3eae202c0d271567505d775c4cbbd91b4b67f95f4d2a9ad7073e6766775fce92507aa592e249072db62799e79e515289259e8d72693a3e3dbd2e264741c';
+$vector_header = 't=1750000000,v1=whk_ab12cd34:' . $vector_hex;
+
+gf_paystack_test_check(GFPaystackApi::verify_signature($vector_header, $vector_body, $whsec, 1750000000) === true, 'verify_signature case 1');
+gf_paystack_test_check(GFPaystackApi::verify_signature($vector_header, $vector_body, $whsec, 1750000300) === true, 'verify_signature case 2');
+gf_paystack_test_check(GFPaystackApi::verify_signature($vector_header, $vector_body, $whsec, 1750000301) === false, 'verify_signature case 3');
+gf_paystack_test_check(GFPaystackApi::verify_signature($vector_header, $vector_body, $whsec, 1749999699) === false, 'verify_signature case 4');
+gf_paystack_test_check(GFPaystackApi::verify_signature($vector_header, $vector_body . ' ', $whsec, 1750000000) === false, 'verify_signature case 5');
+gf_paystack_test_check(GFPaystackApi::verify_signature($vector_header, $vector_body, 'whsec_' . str_repeat('b', 64), 1750000000) === false, 'verify_signature case 6');
+gf_paystack_test_check(GFPaystackApi::verify_signature('t=1750000000,v1=whk_old:00,v1=whk_ab12cd34:' . $vector_hex, $vector_body, $whsec, 1750000000) === true, 'verify_signature case 7');
+gf_paystack_test_check(GFPaystackApi::verify_signature('v1=whk_ab12cd34:' . $vector_hex, $vector_body, $whsec, 1750000000) === false, 'verify_signature case 8');
+gf_paystack_test_check(GFPaystackApi::verify_signature('t=1750000000,v1=' . $vector_hex, $vector_body, $whsec, 1750000000) === false, 'verify_signature case 9');
+
+$now = time();
+$fresh_header = "t=$now,v1=whk_ab12cd34:" . hash_hmac('sha512', "$now.$webhook_body", $whsec);
+$rk_api = new GFPaystackApi((object) array('secret_key' => 'rk_test_restricted', 'public_key' => 'pk', 'webhook_secret' => $whsec));
+$sk_whsec_api = new GFPaystackApi((object) array('secret_key' => 'sk_test_secret', 'public_key' => 'pk', 'webhook_secret' => $whsec));
+$rk_no_whsec_api = new GFPaystackApi((object) array('secret_key' => 'rk_test_restricted', 'public_key' => 'pk'));
+
+gf_paystack_test_check($rk_api->validate_webhook($webhook_body, '', $fresh_header) === true, 'validate_webhook signing secret case 1');
+gf_paystack_test_check($rk_api->validate_webhook($webhook_body, '', "t=$now,v1=whk_ab12cd34:00") === false, 'validate_webhook signing secret case 2');
+gf_paystack_test_check($sk_whsec_api->validate_webhook($webhook_body, $webhook_sig, "t=$now,v1=whk_ab12cd34:00") === false, 'validate_webhook signing secret case 3');
+gf_paystack_test_check($sk_whsec_api->validate_webhook($webhook_body, $webhook_sig, '') === true, 'validate_webhook signing secret case 4');
+gf_paystack_test_check($rk_api->validate_webhook($webhook_body, hash_hmac('sha512', $webhook_body, 'rk_test_restricted'), '') === false, 'validate_webhook signing secret case 5');
+gf_paystack_test_check($rk_no_whsec_api->validate_webhook($webhook_body, hash_hmac('sha512', $webhook_body, 'rk_test_restricted'), $fresh_header) === false, 'validate_webhook signing secret case 6');
+
+$_SERVER['HTTP_PAYSTACK_SIGNATURE'] = $fresh_header;
+gf_paystack_test_check($rk_api->validate_webhook($webhook_body) === true, 'validate_webhook signing secret case 7');
+unset($_SERVER['HTTP_PAYSTACK_SIGNATURE']);
+
 gf_paystack_test_check(GFPaystack::resolve_webhook_mode('live') === 'live', 'resolve_webhook_mode case 1');
 gf_paystack_test_check(GFPaystack::resolve_webhook_mode('test') === 'test', 'resolve_webhook_mode case 2');
 gf_paystack_test_check(GFPaystack::resolve_webhook_mode('LIVE') === null, 'resolve_webhook_mode case 3');
