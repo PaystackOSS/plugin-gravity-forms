@@ -2,6 +2,8 @@
 
 defined('ABSPATH') || die();
 
+require_once __DIR__ . '/includes/class-gf-paystack-keys.php';
+
 // Include the payment add-on framework.
 GFForms::include_payment_addon_framework();
 
@@ -225,6 +227,16 @@ class GFPaystack extends GFPaymentAddOn
         }
 
         return self::$_instance;
+    }
+
+    public function log_debug($message)
+    {
+        parent::log_debug(GF_Paystack_Keys::redact($message));
+    }
+
+    public function log_error($message)
+    {
+        parent::log_error(GF_Paystack_Keys::redact($message));
     }
 
     /**

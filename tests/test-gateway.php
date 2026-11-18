@@ -50,8 +50,42 @@ $log_thrown = gf_paystack_exception_message(function () use ($log_api) {
 });
 gf_paystack_test_check(strpos($log_thrown, 'Paystack Addon for Gravity Forms') !== false, 'send_request logging case 5');
 
+file_put_contents($log_file, '');
+$GLOBALS['gf_paystack_test_remote_response'] = array('body' => json_encode(array('status' => false, 'message' => 'bad rk_live_abc123XYZ and whsec_def456 given')));
+$log_thrown = gf_paystack_exception_message(function () use ($log_api) {
+    $log_api->send_request('transaction/verify/abc', array(), 'get');
+});
+$log_contents = (string) file_get_contents($log_file);
+gf_paystack_test_check(strpos($log_contents, 'abc123XYZ') === false && strpos($log_contents, 'def456') === false, 'send_request logging case 6');
+
+$rk_api = new GFPaystackApi((object) array('secret_key' => 'rk_live_scopedsecret99', 'public_key' => 'pk_live_public'));
+file_put_contents($log_file, '');
+$GLOBALS['gf_paystack_test_remote_response'] = array('response' => array('code' => 403), 'body' => json_encode(array('status' => false, 'message' => 'This restricted key is not permitted to perform this action')));
+$log_thrown = gf_paystack_exception_message(function () use ($rk_api) {
+    $rk_api->send_request('transaction/verify/abc?x=1', array(), 'get');
+});
+$log_contents = (string) file_get_contents($log_file);
+gf_paystack_test_check($log_thrown === 'This restricted key is not permitted to perform this action', 'rk scope denied case 1');
+gf_paystack_test_check(strpos($log_contents, 'rk scope denied method=GET path=/transaction/verify/abc') !== false && strpos($log_contents, 'x=1', strpos($log_contents, 'rk scope denied')) === false, 'rk scope denied case 2');
+gf_paystack_test_check(strpos($log_contents, 'rk_live_scopedsecret99') === false, 'rk scope denied case 3');
+
+file_put_contents($log_file, '');
+$GLOBALS['gf_paystack_test_remote_response'] = array('response' => array('code' => 403), 'body' => json_encode(array('status' => false, 'message' => 'Something else')));
+gf_paystack_exception_message(function () use ($rk_api) {
+    $rk_api->send_request('transaction/verify/abc', array(), 'get');
+});
+gf_paystack_test_check(strpos((string) file_get_contents($log_file), 'rk scope denied') === false, 'rk scope denied case 4');
+
 ini_set('error_log', $previous_log === false ? '' : $previous_log);
 unlink($log_file);
+
+$GLOBALS['gf_paystack_test_gf_logs'] = array();
+$gf_log_addon = new GFPaystackGatewayFixture();
+$gf_log_addon->log_error('bad rk_live_abc123XYZ here');
+$gf_log_addon->log_debug('got whsec_def456 and sk_test_ghi789');
+$gf_logged = json_encode($GLOBALS['gf_paystack_test_gf_logs']);
+gf_paystack_test_check(count($GLOBALS['gf_paystack_test_gf_logs']) === 2 && strpos($gf_logged, 'abc123XYZ') === false && strpos($gf_logged, 'def456') === false && strpos($gf_logged, 'ghi789') === false, 'addon log redaction case 1');
+gf_paystack_test_check(strpos($gf_logged, 'rk_live_[redacted]') !== false && strpos($gf_logged, 'whsec_[redacted]') !== false, 'addon log redaction case 2');
 
 $event_settings = array('api_mode' => 'test', 'live_secret_key' => 'sk_live_a', 'test_secret_key' => 'sk_test_b');
 $event_addon = new GFPaystackEventFixture();

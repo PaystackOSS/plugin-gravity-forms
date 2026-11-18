@@ -157,10 +157,12 @@ if (!class_exists('GFPaymentAddOn')) {
 
         public function log_debug($message)
         {
+            $GLOBALS['gf_paystack_test_gf_logs'][] = array('debug', $message);
         }
 
         public function log_error($message)
         {
+            $GLOBALS['gf_paystack_test_gf_logs'][] = array('error', $message);
         }
 
         public function get_plugin_settings()
