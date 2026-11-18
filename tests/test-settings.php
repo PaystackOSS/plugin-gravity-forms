@@ -112,7 +112,7 @@ $a = $st_run('live', $rk_posted, array(), $with_feeds(array($sub_feed(null))), '
 gf_paystack_test_check($a->plans_calls === array($st_rk_live), 'settings save treats a feed without a mode as live');
 
 $a = $st_run('live', $rk_posted, array(), $with_feeds(array($sub_feed('live')), 'plans_missing'), 'key');
-gf_paystack_test_check($a->field_errors['live_secret_key'] === 'Subscriptions need Plans: write on your live restricted key. Add it in your Paystack Dashboard, then save this feed again.' . $st_suffix, 'settings save plans_missing error on the key field');
+gf_paystack_test_check($a->field_errors['live_secret_key'] === 'Subscriptions need Plans: write on your live restricted key. Add it in your Paystack Dashboard, then save these settings again.' . $st_suffix, 'settings save plans_missing error on the key field');
 
 $a = $st_run('live', $rk_posted, array(), $with_feeds(array($sub_feed('live')), 'plans_mor'), 'key');
 gf_paystack_test_check($a->field_errors['live_secret_key'] === 'Paystack subscriptions aren\'t available for merchant-of-record accounts.' . $st_suffix, 'settings save plans_mor error on the key field');
@@ -120,8 +120,14 @@ gf_paystack_test_check($a->field_errors['live_secret_key'] === 'Paystack subscri
 $a = $st_run('live', $rk_posted, array(), $with_feeds(array($sub_feed('live')), 'unverifiable'), 'key');
 gf_paystack_test_check(strpos($a->field_errors['live_secret_key'], 'We couldn\'t reach Paystack') === 0, 'settings save plans unverifiable error on the key field');
 
-$a = $st_run('live', $rk_posted, array(), $with_feeds(array($sub_feed('test'), $sub_feed('live', '0'), $sub_feed('live', '1', 'product')), 'plans_missing'), 'key');
-gf_paystack_test_check($a->field_errors === array() && $a->plans_calls === array(), 'settings save skips plans when no active subscription feed uses that mode');
+$a = $st_run('live', $rk_posted, array(), $with_feeds(array($sub_feed('test'), $sub_feed('live', '1', 'product')), 'plans_missing'), 'key');
+gf_paystack_test_check($a->field_errors === array() && $a->plans_calls === array(), 'settings save skips plans when no subscription feed uses that mode');
+
+$a = $st_run('live', $rk_posted, array(), $with_feeds(array($sub_feed('live', '0'))), 'key');
+gf_paystack_test_check($a->plans_calls === array($st_rk_live), 'settings save probes plans for an inactive subscription feed too');
+
+$a = $st_run('test', array('test_secret_key' => $st_rk_test, 'test_webhook_secret' => $st_ws_test), array('api_mode' => 'test'), $with_feeds(array($sub_feed(null))), 'key');
+gf_paystack_test_check($a->plans_calls === array($st_rk_test), 'settings save treats a feed without a mode as the global api mode');
 
 $a2 = $st_run('live', $rk_posted, array(), function ($addon) use ($sub_feed, $verdict) {
     $addon->feeds = array($sub_feed('live'));
@@ -333,3 +339,35 @@ $st_reader->stored = array('test_webhook_secret' => " $st_ws_test ", 'live_webho
 gf_paystack_test_check($st_reader->get_webhook_secret('test') === $st_ws_test && $st_reader->get_webhook_secret('live') === $st_ws_live && $st_reader->get_webhook_secret('live', array()) === $st_ws_live, 'settings get_webhook_secret is per mode, trimmed, and falls back to plugin settings');
 gf_paystack_test_check($st_reader->get_stored_secret_key('test') === $st_sk_test && $st_reader->get_stored_secret_key('live', array('live_secret_key' => 'x')) === 'x', 'settings get_stored_secret_key is per mode, trimmed, and prefers passed settings');
 gf_paystack_test_check($st_reader->get_webhook_secret('test', array('test_webhook_secret' => $st_ws_live)) === $st_ws_live && (new GFPaystackSettingsFixture())->get_webhook_secret('test') === '', 'settings get_webhook_secret prefers passed settings and defaults to blank');
+
+// Feed: callback arguments, object fields and the global-mode default.
+class GFPaystackFeedArgsFixture extends GFPaystackFeedWiringFixture
+{
+    public $parent_args = array();
+
+    public function set_transaction_type_callback($callback)
+    {
+        $this->transaction_type_callback = $callback;
+    }
+
+    public function parent_callback($field, $value = null)
+    {
+        $this->parent_args = func_get_args();
+    }
+}
+
+$args_addon = new GFPaystackFeedArgsFixture();
+$args_addon->posted = array('transactionType' => 'product');
+$args_fields = $args_addon->feed_settings_fields();
+$args_addon->set_transaction_type_callback(array($args_addon, 'parent_callback'));
+$args_addon->validate_subscription_plans($feed_field, 'product');
+gf_paystack_test_check(count($args_addon->parent_args) === 2 && $args_addon->parent_args[1] === 'product', 'feed existing transactionType callback receives both arguments');
+
+$obj_field = (object) array('name' => 'transactionType', 'choices' => array(array('label' => 'Subscription', 'value' => 'subscription')));
+$a = $feed_run(array('transactionType' => 'product'), array(), 'ok', null, $obj_field);
+gf_paystack_test_check($a->field_errors === array('transactionType' => 'This field is required.'), 'feed object field choices are enforced');
+$a = $feed_run(array('transactionType' => 'subscription', 'mode' => 'test'), array('test_secret_key' => $st_rk_test), 'ok', null, $obj_field);
+gf_paystack_test_check($a->field_errors === array() && $a->plans_calls === array($st_rk_test), 'feed object field accepts a listed choice');
+
+$a = $feed_run(array('transactionType' => 'subscription'), array('api_mode' => 'test', 'test_secret_key' => $st_rk_test, 'live_secret_key' => $st_rk_live));
+gf_paystack_test_check($a->plans_calls === array($st_rk_test), 'feed without a mode follows the global api mode');

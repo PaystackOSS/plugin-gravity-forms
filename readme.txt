@@ -80,6 +80,7 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 * Successful-payment (charge.success) webhooks are now confirmed with Paystack before an entry is marked as paid.
 * Keys and signing secrets are hidden in logs.
 * The key fields are now password inputs.
+* Removed the admin-only ?secret= / ?public= URL override for API keys.
 
 = 2.0.9 - October 28, 2026 =
 * Fixed a fatal error on the confirmation page after a successful payment when the usage tracking service is unreachable.

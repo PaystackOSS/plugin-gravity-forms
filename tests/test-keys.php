@@ -50,6 +50,7 @@ $keys_redact_cases = array(
     'query string' => array('x=1&secret=sk_live_abc&y=2', 'x=1&secret=sk_live_[redacted]'),
     'rk with &,; chars' => array('k=rk_live_ab&cd,ef;gh_ijklmnop tail', 'k=rk_live_[redacted] tail'),
     'json escaped' => array('{"key":"rk_live_abc123"}', '{"key":"rk_live_[redacted]"}'),
+    'json escaped slash tail' => array('{"k":"rk_live_abcdefghij\\/klmnopTAIL"}', '{"k":"rk_live_[redacted]"}'),
     'url encoded' => array('secret%3Dsk_live_abc%26y', 'secret%3Dsk_live_[redacted]'),
     'pk' => array('pk_test_abc123', 'pk_test_[redacted]'),
     'no secrets' => array('Payment verified for ref gf-9 task_live_x', 'Payment verified for ref gf-9 task_live_x'),
@@ -71,6 +72,10 @@ $keys_extra = array(
     'whsec at 16 chars' => array(array('live', $sk_live, $sk_live, 'whsec_' . str_repeat('a', 16), '', true), false, null),
     'whsec at 15 chars' => array(array('live', $sk_live, $sk_live, 'whsec_' . str_repeat('a', 15), '', true), false, 'whsec_format'),
     'whitespace-only other whsec is blank' => array(array('live', $sk_live, $sk_live, $whsec_a, '   ', true), false, null),
+    'rk containing a double quote' => array(array('live', 'rk_live_abcdefgh"ijklmnopqr', '', $whsec_a, '', true), false, 'invalid_format'),
+    'rk containing a backslash' => array(array('live', 'rk_live_abcdefgh\\ijklmnopqr', '', $whsec_a, '', true), false, 'invalid_format'),
+    'rk containing a less-than' => array(array('live', 'rk_live_abcdefgh<ijklmnopqr', '', $whsec_a, '', true), false, 'invalid_format'),
+    'rk containing a single quote' => array(array('live', "rk_live_abcdefgh'ijklmnopqr", '', $whsec_a, '', true), false, 'invalid_format'),
     'rk error reports no probe' => array(array('live', $rk_live, '', '', '', true), false, 'whsec_required'),
 );
 foreach ($keys_extra as $label => $case) {

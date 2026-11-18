@@ -1356,7 +1356,7 @@ class GFPaystack extends GFPaymentAddOn
             } catch (\Exception $e) {
                 $this->log_error(__METHOD__ . '(): Transaction could not be verified. Reason: ' . $e->getMessage());
 
-                return new WP_Error('transaction_verification', $e->getMessage(), array('status_header' => 500));
+                return new WP_Error('transaction_verification', __('Transaction could not be verified.', 'gravityformspaystack'), array('status_header' => 500));
             }
 
             $charge = rgar($response, 'data');
@@ -1367,7 +1367,7 @@ class GFPaystack extends GFPaymentAddOn
                 return false;
             }
 
-            if ((string) rgar($charge, 'id') !== (string) rgars($event, 'data/id') || rgar($charge, 'reference') !== $reference) {
+            if (rgar($charge, 'id') === null || rgar($charge, 'id') === '' || (string) rgar($charge, 'id') !== (string) rgars($event, 'data/id') || rgar($charge, 'reference') !== $reference) {
                 $this->log_error(__METHOD__ . '(): Verified transaction does not match the webhook event. Aborting.');
 
                 return false;
@@ -1772,6 +1772,11 @@ class GFPaystack extends GFPaymentAddOn
                     $candidates[] = $candidate_mode;
                 }
             }
+
+            $api_mode = $this->get_api_mode($settings);
+            if (!in_array($api_mode, $candidates, true)) {
+                $candidates[] = $api_mode;
+            }
         }
 
         if (empty($candidates)) {
@@ -2059,7 +2064,7 @@ class GFPaystack extends GFPaymentAddOn
     }
 
     /**
-     * Read straight from settings so the ?secret= override can't reach webhook verification.
+     * Reads straight from stored settings.
      *
      * @param string     $mode
      * @param array|null $settings
@@ -2188,10 +2193,10 @@ class GFPaystack extends GFPaymentAddOn
             return;
         }
 
-        if ($this->has_active_subscription_feed($mode)) {
+        if ($this->has_subscription_feed($mode)) {
             $plans = $this->probe_restricted_key_plans($key);
             if ($plans !== 'ok') {
-                $this->set_field_error(array('name' => "{$mode}_secret_key"), $this->plans_error_message($plans, $mode) . $this->not_saved_suffix());
+                $this->set_field_error(array('name' => "{$mode}_secret_key"), $this->plans_error_message($plans, $mode, 'settings') . $this->not_saved_suffix());
             }
         }
     }
@@ -2201,10 +2206,10 @@ class GFPaystack extends GFPaymentAddOn
      *
      * @return bool
      */
-    protected function has_active_subscription_feed($mode)
+    protected function has_subscription_feed($mode)
     {
         foreach ((array) $this->get_feeds() as $feed) {
-            if (rgar($feed, 'is_active') && rgars($feed, 'meta/transactionType') === 'subscription' && $this->feed_mode($feed) === $mode) {
+            if (rgars($feed, 'meta/transactionType') === 'subscription' && $this->feed_mode($feed) === $mode) {
                 return true;
             }
         }
@@ -2215,11 +2220,16 @@ class GFPaystack extends GFPaymentAddOn
     /**
      * @param array|false $feed
      *
-     * @return string 'test' or 'live'; feeds default to live.
+     * @return string 'test' or 'live'; a feed without a mode follows the global API mode.
      */
     protected function feed_mode($feed)
     {
-        return rgars($feed, 'meta/mode') === 'test' ? 'test' : 'live';
+        $mode = rgars($feed, 'meta/mode');
+        if ($mode === 'test' || $mode === 'live') {
+            return $mode;
+        }
+
+        return $this->get_api_mode($this->get_plugin_settings()) === 'test' ? 'test' : 'live';
     }
 
     /**
@@ -2245,23 +2255,25 @@ class GFPaystack extends GFPaymentAddOn
     /**
      * Subscription feeds need Plans: write, which the settings probe doesn't check.
      *
-     * @param array $field The transactionType field properties.
+     * @param array|object $field The transactionType field.
+     * @param mixed        $value The submitted value, when the caller passes one.
      *
      * @return void
      */
-    public function validate_subscription_plans($field)
+    public function validate_subscription_plans($field, $value = null)
     {
         if (is_callable($this->transaction_type_callback)) {
-            call_user_func($this->transaction_type_callback, $field);
+            call_user_func_array($this->transaction_type_callback, func_get_args());
         }
 
         $settings = $this->get_posted_settings();
         $type     = rgar($settings, 'transactionType');
 
         $allowed = array('product', 'subscription');
-        if (is_array(rgar($field, 'choices'))) {
+        $choices = is_array($field) ? rgar($field, 'choices') : (is_object($field) && isset($field->choices) ? $field->choices : null);
+        if (is_array($choices)) {
             $allowed = array();
-            foreach ($field['choices'] as $choice) {
+            foreach ($choices as $choice) {
                 $allowed[] = isset($choice['value']) ? $choice['value'] : rgar($choice, 'name');
             }
         }
@@ -2294,13 +2306,18 @@ class GFPaystack extends GFPaymentAddOn
 
     /**
      * @param string $result A probe_plans() code other than 'ok'.
-     * @param string $mode   'test' or 'live'.
+     * @param string $mode    'test' or 'live'.
+     * @param string $context 'feed' or 'settings'.
      *
      * @return string
      */
-    protected function plans_error_message($result, $mode)
+    protected function plans_error_message($result, $mode, $context = 'feed')
     {
         if ($result === 'plans_missing') {
+            if ($context === 'settings') {
+                return sprintf(esc_html__('Subscriptions need Plans: write on your %s restricted key. Add it in your Paystack Dashboard, then save these settings again.', 'gravityformspaystack'), $mode);
+            }
+
             return sprintf(esc_html__('Subscriptions need Plans: write on your %s restricted key. Add it in your Paystack Dashboard, then save this feed again.', 'gravityformspaystack'), $mode);
         }
 

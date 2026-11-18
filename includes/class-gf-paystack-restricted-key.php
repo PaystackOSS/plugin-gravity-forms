@@ -36,6 +36,11 @@ if (!class_exists('GF_Paystack_Restricted_Key')) {
         protected static $budget_seconds = 15.0;
         protected static $deadline = null;
 
+        protected static function now()
+        {
+            return microtime(true);
+        }
+
         public static function reset_budget()
         {
             self::$deadline = null;
@@ -54,11 +59,13 @@ if (!class_exists('GF_Paystack_Restricted_Key')) {
 
         private static function budget_left()
         {
-            if (self::$deadline === null) {
-                self::$deadline = microtime(true) + static::$budget_seconds;
+            $now = static::now();
+            // A long-lived process must not stay out of budget forever after one slow request.
+            if (self::$deadline === null || $now > self::$deadline + 60) {
+                self::$deadline = $now + static::$budget_seconds;
             }
 
-            return microtime(true) < self::$deadline;
+            return $now < self::$deadline;
         }
 
         public static function validate($key, $request = null)
@@ -153,7 +160,7 @@ if (!class_exists('GF_Paystack_Restricted_Key')) {
             }
             // Header names are case-insensitive, so a filter's differently-cased Authorization must not survive alongside ours.
             foreach (array_keys($headers) as $name) {
-                if (preg_match('/^authorization$/i', (string) $name)) {
+                if (strcasecmp(trim((string) $name), 'authorization') === 0) {
                     unset($headers[$name]);
                 }
             }

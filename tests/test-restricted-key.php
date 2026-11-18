@@ -143,6 +143,38 @@ $v = GF_Paystack_Restricted_Key_Spent::validate($rk_key, function ($m, $u, $h, $
 });
 gf_paystack_test_check($v['code'] === 'unverifiable' && $v['reason'] === 'transient' && strpos($v['probes'], 'transactions:read:200') === 0, 'rk budget exhausted mid-run is unverifiable transient');
 
+// A new window starts once the old one has been over for more than 60s.
+if (!class_exists('GF_Paystack_Restricted_Key_Clocked')) {
+    class GF_Paystack_Restricted_Key_Clocked extends GF_Paystack_Restricted_Key
+    {
+        public static $time = 1000.0;
+        protected static $budget_seconds = 5.0;
+
+        protected static function now()
+        {
+            return static::$time;
+        }
+    }
+}
+GF_Paystack_Restricted_Key::reset_budget();
+$clock_calls = 0;
+$clock_request = function () use (&$clock_calls) {
+    $clock_calls++;
+
+    return array('status' => 200, 'body' => null);
+};
+GF_Paystack_Restricted_Key_Clocked::$time = 1000.0;
+GF_Paystack_Restricted_Key_Clocked::validate($rk_key, $clock_request);
+$first_calls = $clock_calls;
+GF_Paystack_Restricted_Key_Clocked::$time = 1010.0;
+$clock_calls = 0;
+$v = GF_Paystack_Restricted_Key_Clocked::validate($rk_key, $clock_request);
+gf_paystack_test_check($first_calls > 0 && $clock_calls === 0 && $v['code'] === 'unverifiable', 'rk budget stays spent shortly after the window ends');
+GF_Paystack_Restricted_Key_Clocked::$time = 1066.0;
+$v = GF_Paystack_Restricted_Key_Clocked::validate($rk_key, $clock_request);
+gf_paystack_test_check($clock_calls > 0, 'rk budget opens a new window once the old one is over by more than 60s');
+GF_Paystack_Restricted_Key::reset_budget();
+
 // Budget is shared across calls: a second validate() in the same request gets what the first left.
 GF_Paystack_Restricted_Key::reset_budget();
 $slow_ok = function ($m, $u, $h, $b) use ($rk_make, $rk_ok_map, $scope_msg) {
@@ -213,6 +245,15 @@ $auth_keys = array_filter(array_keys($sent_headers), function ($k) {
     return strtolower($k) === 'authorization';
 });
 gf_paystack_test_check(count($auth_keys) === 1 && $sent_headers['Authorization'] === 'Bearer ' . $rk_key && $sent_headers['X-Extra'] === '1', 'rk probe headers keep a single Authorization with the saved key');
+
+foreach (array(' Authorization', 'authorization ') as $odd_name) {
+    $GLOBALS['gf_paystack_test_remote_calls'] = array();
+    $GLOBALS['gf_paystack_test_filters']['gf_paystack_request_headers'] = array($odd_name => 'Bearer other', 'X-Extra' => '1');
+    GF_Paystack_Restricted_Key::validate($rk_key);
+    $sent_headers = $GLOBALS['gf_paystack_test_remote_calls'][0][1]['headers'];
+    unset($GLOBALS['gf_paystack_test_filters']['gf_paystack_request_headers']);
+    gf_paystack_test_check(array_keys($sent_headers) === array('X-Extra', 'Authorization') && $sent_headers['Authorization'] === 'Bearer ' . $rk_key, 'rk probe strips a padded Authorization header name: ' . json_encode($odd_name));
+}
 
 // # Coverage additions (dedicated test pass)
 

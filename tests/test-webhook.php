@@ -89,6 +89,11 @@ $throwing_charge_api->throw = true;
 $result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', $stored, null, null, $throwing_charge_api);
 gf_paystack_test_check(is_wp_error($result) && $result->code === 'transaction_verification' && rgar($result->get_error_data(), 'status_header') === 500, 'callback case 32: verify throws asks Paystack to retry');
 
+gf_paystack_test_check(is_wp_error($result) && $result->get_error_message() === 'Transaction could not be verified.' && strpos($result->get_error_message(), 'request failed') === false, 'callback case 32b: verify failure message is fixed');
+
+$result = gf_paystack_callback_run(gf_paystack_charge_event(array('id' => '')), 'live', $stored, null, null, $charge_api(array('id' => '')));
+gf_paystack_test_check($result === false, 'callback case 33b: verified charge with an empty id is not completed');
+
 $result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', $stored, null, null, $charge_api(array('id' => null)));
 gf_paystack_test_check($result === false, 'callback case 33: verified charge without an id is not completed');
 
@@ -417,9 +422,13 @@ $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] = hash_hmac('sha512', $event_body, 'sk_tes
 gf_paystack_test_check(is_array($event_addon($both_sk)->get_webhook_event($event_body)), 'domain missing, no whsec: api mode key verifies');
 
 $one_whsec = array('api_mode' => 'live', 'live_secret_key' => $sk_live, 'test_secret_key' => 'sk_test_abc123', 'test_webhook_secret' => $test_whsec);
+$_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] = hash_hmac('sha512', $event_body, 'sk_other');
+$addon = $event_addon($one_whsec);
+gf_paystack_test_check($addon->get_webhook_event($event_body) === false && $addon->webhook_mode_value() === 'live' && strpos($addon->errors[0], 'checks=test:whsec:malformed') !== false && strpos($addon->errors[0], 'live:legacy:invalid') !== false, 'domain missing: whsec modes first, then the api mode');
+
 $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] = hash_hmac('sha512', $event_body, $sk_live);
 $addon = $event_addon($one_whsec);
-gf_paystack_test_check($addon->get_webhook_event($event_body) === false && $addon->webhook_mode_value() === 'test' && strpos($addon->errors[0], 'checks=test:whsec:malformed') !== false, 'domain missing: only modes with a whsec are candidates');
+gf_paystack_test_check(is_array($addon->get_webhook_event($event_body)) && $addon->webhook_mode_value() === 'live', 'domain missing: whsec in test, api mode live still verifies a legacy-signed event');
 $reset_sig_headers();
 
 // ?secret= must not change the verifying key
