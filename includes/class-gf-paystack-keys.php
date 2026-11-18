@@ -9,7 +9,7 @@ if (!class_exists('GF_Paystack_Keys')) {
         const RK_SHAPE = '/^rk_(?:test|live)_[\x21-\x7e]{16,256}$/';
         const WHSEC_SHAPE = '/^whsec_[A-Za-z0-9_]{16,}$/';
         // A prefix glued to a word (`task_live_`) isn't a key, but one after a %XX escape (`secret%3Dsk_live_`) is.
-        const REDACT_PATTERN = '/(?<!(?<!%[0-9A-Fa-f])[A-Za-z0-9])(?:(?:sk|rk|pk)_(?:live|test)_|whsec_)[^\s"\'&,;<>]+/';
+        const REDACT_PATTERN = '/(?<!(?<!%[0-9A-Fa-f])[A-Za-z0-9])(?:(?:sk|rk|pk)_(?:live|test)_|whsec_)[^\s"\'<>\\\\]+/';
 
         public static function type($key)
         {

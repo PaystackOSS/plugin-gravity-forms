@@ -16,6 +16,7 @@ if (!class_exists('GF_Paystack_Restricted_Key_Zero')) {
     }
 }
 
+GF_Paystack_Restricted_Key::reset_budget();
 $rk_key = 'rk_live_' . str_repeat('Zq9', 10);
 $scope_msg = 'This restricted key is not permitted to perform this action';
 $write_msg = 'Sorry, this feature is no longer available.';
@@ -52,6 +53,11 @@ foreach (GF_Paystack_Restricted_Key::PROBES as $p) {
     $scope_list[] = $p['scope'];
 }
 gf_paystack_test_check($scope_list === $rk_expected_scopes, 'rk probe table scope list and order pinned');
+$labels_ok = true;
+foreach (GF_Paystack_Restricted_Key::PROBES as $p) {
+    $labels_ok = $labels_ok && isset($p['label']) && is_string($p['label']) && $p['label'] !== '' && GF_Paystack_Restricted_Key::scope_label($p['scope']) === $p['label'];
+}
+gf_paystack_test_check($labels_ok && GF_Paystack_Restricted_Key::scope_label('payouts') === 'Payouts' && GF_Paystack_Restricted_Key::scope_label('unknown') === 'unknown', 'rk every probe has a label and scope_label falls back to the raw scope');
 gf_paystack_test_check(GF_Paystack_Restricted_Key::PROBES[1]['path'] === 'transaction/check_authorization' && GF_Paystack_Restricted_Key::PROBES[1]['method'] === 'POST', 'rk write probe route pinned');
 
 $v = GF_Paystack_Restricted_Key::validate($rk_key, $rk_make($rk_ok_map, array(403, $scope_msg), $log));
@@ -112,6 +118,7 @@ $v = GF_Paystack_Restricted_Key::validate($rk_key, function () {
 });
 gf_paystack_test_check($v['code'] === 'unverifiable', 'rk malformed response is unverifiable');
 
+GF_Paystack_Restricted_Key::reset_budget();
 $calls = 0;
 $v = GF_Paystack_Restricted_Key_Zero::validate($rk_key, function () use (&$calls) {
     $calls++;
@@ -120,6 +127,14 @@ $v = GF_Paystack_Restricted_Key_Zero::validate($rk_key, function () use (&$calls
 });
 gf_paystack_test_check($v['code'] === 'unverifiable' && $v['reason'] === 'transient' && $calls === 0 && $v['probes'] === '-', 'rk exhausted budget stops before any probe');
 
+GF_Paystack_Restricted_Key::reset_budget();
+gf_paystack_test_check(GF_Paystack_Restricted_Key_Zero::probe_plans($rk_key, function () use (&$calls) {
+    $calls++;
+
+    return array('status' => 400, 'body' => null);
+}) === 'unverifiable' && $calls === 0, 'rk probe_plans after exhausted budget is unverifiable without a request');
+
+GF_Paystack_Restricted_Key::reset_budget();
 $slow = $rk_make($rk_ok_map, array(403, $scope_msg), $log);
 $v = GF_Paystack_Restricted_Key_Spent::validate($rk_key, function ($m, $u, $h, $b) use ($slow) {
     usleep(30000);
@@ -127,6 +142,24 @@ $v = GF_Paystack_Restricted_Key_Spent::validate($rk_key, function ($m, $u, $h, $
     return $slow($m, $u, $h, $b);
 });
 gf_paystack_test_check($v['code'] === 'unverifiable' && $v['reason'] === 'transient' && strpos($v['probes'], 'transactions:read:200') === 0, 'rk budget exhausted mid-run is unverifiable transient');
+
+// Budget is shared across calls: a second validate() in the same request gets what the first left.
+GF_Paystack_Restricted_Key::reset_budget();
+$slow_ok = function ($m, $u, $h, $b) use ($rk_make, $rk_ok_map, $scope_msg) {
+    usleep(30000);
+    $f = $rk_make($rk_ok_map, array(403, $scope_msg));
+
+    return $f($m, $u, $h, $b);
+};
+GF_Paystack_Restricted_Key_Spent::validate($rk_key, $slow_ok);
+$calls = 0;
+$v = GF_Paystack_Restricted_Key_Spent::validate($rk_key, function () use (&$calls) {
+    $calls++;
+
+    return array('status' => 200, 'body' => null);
+});
+gf_paystack_test_check($v['code'] === 'unverifiable' && $v['reason'] === 'transient' && $calls === 0, 'rk second validate shares the exhausted budget');
+GF_Paystack_Restricted_Key::reset_budget();
 
 // probe_plans
 $plan = function ($status, $message = null) {
@@ -169,3 +202,14 @@ $GLOBALS['gf_paystack_test_remote_calls'] = array();
 $GLOBALS['gf_paystack_test_remote_response'] = new WP_Error('http', 'down');
 $v = GF_Paystack_Restricted_Key::validate($rk_key);
 gf_paystack_test_check($v['code'] === 'unverifiable' && $v['reason'] === 'transient' && count($GLOBALS['gf_paystack_test_remote_calls']) === 1 && strpos($v['probes'], $rk_key) === false, 'rk wp_error maps to status 0');
+
+$GLOBALS['gf_paystack_test_remote_calls'] = array();
+$GLOBALS['gf_paystack_test_remote_response'] = array('response' => array('code' => 403), 'body' => json_encode(array('message' => $scope_msg)));
+$GLOBALS['gf_paystack_test_filters']['gf_paystack_request_headers'] = array('Authorization' => 'Bearer other', 'authorization' => 'Bearer other', 'X-Extra' => '1');
+GF_Paystack_Restricted_Key::validate($rk_key);
+$sent_headers = $GLOBALS['gf_paystack_test_remote_calls'][0][1]['headers'];
+unset($GLOBALS['gf_paystack_test_filters']['gf_paystack_request_headers']);
+$auth_keys = array_filter(array_keys($sent_headers), function ($k) {
+    return strtolower($k) === 'authorization';
+});
+gf_paystack_test_check(count($auth_keys) === 1 && $sent_headers['Authorization'] === 'Bearer ' . $rk_key && $sent_headers['X-Extra'] === '1', 'rk probe headers keep a single Authorization with the saved key');

@@ -4,6 +4,7 @@ if (!defined('ABSPATH')) {
 }
 
 require_once __DIR__ . '/includes/class-gf-paystack-keys.php';
+require_once __DIR__ . '/includes/class-gf-paystack-restricted-key.php';
 
 class GFPaystackApi
 {
@@ -100,7 +101,7 @@ class GFPaystackApi
             error_log(GF_Paystack_Keys::redact(__METHOD__ . '(): ' . strtoupper($method) . ' ' . $uri . ' status: ' . (isset($body['status']) ? var_export($body['status'], true) : 'unknown')));
 
             $code = isset($res['response']['code']) ? (int) $res['response']['code'] : 0;
-            if ($code === 403 && isset($body['message']) && $body['message'] === 'This restricted key is not permitted to perform this action') {
+            if ($code === 403 && isset($body['message']) && $body['message'] === GF_Paystack_Restricted_Key::SCOPE_DENIED_MESSAGE) {
                 error_log(GF_Paystack_Keys::redact('rk scope denied method=' . strtoupper($method) . ' path=' . parse_url($uri, PHP_URL_PATH)));
             }
 

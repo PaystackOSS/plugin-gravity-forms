@@ -47,7 +47,8 @@ foreach ($keys_cases as $label => $case) {
 $keys_redact_cases = array(
     'punctuation rk' => array('key rk_live_ab-c.d~e!f_g tail', 'key rk_live_[redacted] tail'),
     'base64 whsec' => array('whsec_ab+/cd==ef rest', 'whsec_[redacted] rest'),
-    'query string' => array('x=1&secret=sk_live_abc&y=2', 'x=1&secret=sk_live_[redacted]&y=2'),
+    'query string' => array('x=1&secret=sk_live_abc&y=2', 'x=1&secret=sk_live_[redacted]'),
+    'rk with &,; chars' => array('k=rk_live_ab&cd,ef;gh_ijklmnop tail', 'k=rk_live_[redacted] tail'),
     'json escaped' => array('{"key":"rk_live_abc123"}', '{"key":"rk_live_[redacted]"}'),
     'url encoded' => array('secret%3Dsk_live_abc%26y', 'secret%3Dsk_live_[redacted]'),
     'pk' => array('pk_test_abc123', 'pk_test_[redacted]'),
