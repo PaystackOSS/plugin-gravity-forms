@@ -187,6 +187,99 @@ if (!class_exists('GFPaymentAddOn')) {
         {
             return rgar($settings, $setting_name, $default_value);
         }
+
+        public function get_feeds($form_id = null)
+        {
+            return array();
+        }
+
+        public function get_current_feed()
+        {
+            return false;
+        }
+
+        public function feed_settings_fields()
+        {
+            return array(
+                array(
+                    'title'  => 'Feed Settings',
+                    'fields' => array(
+                        array('name' => 'feedName', 'type' => 'text'),
+                        array(
+                            'name'    => 'transactionType',
+                            'type'    => 'select',
+                            'choices' => array(
+                                array('label' => 'Products and Services', 'value' => 'product'),
+                                array('label' => 'Subscription', 'value' => 'subscription'),
+                            ),
+                        ),
+                    ),
+                ),
+            );
+        }
+
+        public function get_field($name, $fields)
+        {
+            foreach ($fields as $section) {
+                foreach (rgar($section, 'fields', array()) as $field) {
+                    if (rgar($field, 'name') === $name) {
+                        return $field;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        public function replace_field($name, $new_field, $fields)
+        {
+            foreach ($fields as $i => $section) {
+                foreach (rgar($section, 'fields', array()) as $j => $field) {
+                    if (rgar($field, 'name') === $name) {
+                        $fields[$i]['fields'][$j] = $new_field;
+                    }
+                }
+            }
+
+            return $fields;
+        }
+
+        public function add_field_after($name, $new_fields, $fields)
+        {
+            return $this->insert_fields($name, $new_fields, $fields, 1);
+        }
+
+        public function add_field_before($name, $new_fields, $fields)
+        {
+            return $this->insert_fields($name, $new_fields, $fields, 0);
+        }
+
+        public function remove_field($name, $fields)
+        {
+            foreach ($fields as $i => $section) {
+                foreach (rgar($section, 'fields', array()) as $j => $field) {
+                    if (rgar($field, 'name') === $name) {
+                        array_splice($fields[$i]['fields'], $j, 1);
+                    }
+                }
+            }
+
+            return $fields;
+        }
+
+        private function insert_fields($name, $new_fields, $fields, $offset)
+        {
+            foreach ($fields as $i => $section) {
+                foreach (rgar($section, 'fields', array()) as $j => $field) {
+                    if (rgar($field, 'name') === $name) {
+                        array_splice($fields[$i]['fields'], $j + $offset, 0, isset($new_fields['name']) ? array($new_fields) : $new_fields);
+                        return $fields;
+                    }
+                }
+            }
+
+            return $fields;
+        }
     }
 }
 
@@ -195,11 +288,18 @@ if (!class_exists('WP_Error')) {
     {
         public $code;
         public $message;
+        public $data;
 
-        public function __construct($code = '', $message = '')
+        public function __construct($code = '', $message = '', $data = '')
         {
             $this->code = $code;
             $this->message = $message;
+            $this->data = $data;
+        }
+
+        public function get_error_data()
+        {
+            return $this->data;
         }
 
         public function get_error_message()

@@ -46,7 +46,7 @@ $stored = array('paystack_mode' => 'live', 'paystack_tx_amount' => '5000', 'pays
 
 $charge_api = function ($overrides = array()) {
     $api = new GFPaystackRecordingApi();
-    $api->response = array('status' => true, 'message' => 'ok', 'data' => array_merge(array('id' => 99, 'status' => 'success', 'amount' => 5000, 'currency' => 'NGN'), $overrides));
+    $api->response = array('status' => true, 'message' => 'ok', 'data' => array_merge(array('id' => 99, 'reference' => 'gf-7-abc', 'status' => 'success', 'amount' => 5000, 'currency' => 'NGN'), $overrides));
     return $api;
 };
 
@@ -87,7 +87,32 @@ gf_paystack_test_check($result === false, 'callback case 31');
 $throwing_charge_api = $charge_api();
 $throwing_charge_api->throw = true;
 $result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', $stored, null, null, $throwing_charge_api);
-gf_paystack_test_check($result === false, 'callback case 32');
+gf_paystack_test_check(is_wp_error($result) && $result->code === 'transaction_verification' && rgar($result->get_error_data(), 'status_header') === 500, 'callback case 32: verify throws asks Paystack to retry');
+
+$result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', $stored, null, null, $charge_api(array('id' => null)));
+gf_paystack_test_check($result === false, 'callback case 33: verified charge without an id is not completed');
+
+$result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', $stored, null, null, $charge_api(array('reference' => 'gf-7-other')));
+gf_paystack_test_check($result === false, 'callback case 34: verified reference mismatch is not completed');
+
+$result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', $stored, null, null, $charge_api(array('reference' => null)));
+gf_paystack_test_check($result === false, 'callback case 35: verified charge without a reference is not completed');
+
+$sub_feed = array('is_active' => '1', 'meta' => array('mode' => 'live', 'transactionType' => 'subscription'));
+$sub_charge = $charge_api(array('authorization' => array('authorization_code' => 'AUTH_verified')));
+$sub_event = gf_paystack_charge_event();
+$sub_event['data']['authorization'] = array('authorization_code' => 'AUTH_forged');
+$result = gf_paystack_callback_run($sub_event, 'live', $stored, $sub_feed, null, $sub_charge);
+gf_paystack_test_check($sub_charge->calls === array('transaction/verify/gf-7-abc') && gform_get_meta('7', 'paystack_tx_auth_code') === 'AUTH_verified', 'callback case 36: subscription branch stores the verified authorization code');
+
+$sub_forged = $charge_api(array('id' => 100, 'authorization' => array('authorization_code' => 'AUTH_verified')));
+gf_paystack_callback_run($sub_event, 'live', $stored, $sub_feed, null, $sub_forged);
+gf_paystack_test_check(gform_get_meta('7', 'paystack_tx_auth_code') === false, 'callback case 37: subscription branch stores nothing when the verified id differs');
+
+$sub_throwing = $charge_api();
+$sub_throwing->throw = true;
+$result = gf_paystack_callback_run($sub_event, 'live', $stored, $sub_feed, null, $sub_throwing);
+gf_paystack_test_check(is_wp_error($result) && rgar($result->get_error_data(), 'status_header') === 500 && gform_get_meta('7', 'paystack_tx_auth_code') === false, 'callback case 38: subscription verify throws asks Paystack to retry');
 
 $result = gf_paystack_callback_run(gf_paystack_charge_event(array('reference' => 'gf-7-unknown')), 'live', $stored);
 gf_paystack_test_check(is_wp_error($result) && $result->code === 'entry_not_found', 'callback case 9');
@@ -346,7 +371,7 @@ gf_paystack_test_check(is_array($event) && $addon->webhook_mode_value() === 'liv
 $_SERVER['HTTP_PAYSTACK_SIGNATURE'] = $header_for($event_body, 'whsec_' . str_repeat('ef56', 8));
 $addon = $event_addon($both);
 gf_paystack_test_check($addon->get_webhook_event($event_body) === false, 'domain missing: no mode verifies');
-gf_paystack_test_check(count($addon->errors) === 1 && strpos($addon->errors[0], 'sig=whsec result=invalid') !== false && strpos($addon->errors[0], $live_whsec) === false, 'failure logged at error level with sig/result, no secret');
+gf_paystack_test_check(count($addon->errors) === 1 && strpos($addon->errors[0], 'checks=live:whsec:invalid,test:whsec:invalid') !== false && strpos($addon->errors[0], $live_whsec) === false, 'failure logged at error level listing every attempt, no secret');
 
 $domain_body = json_encode(array('event' => 'charge.success', 'data' => array('domain' => 'live', 'reference' => 'gf-7-abc')));
 $_SERVER['HTTP_PAYSTACK_SIGNATURE'] = $header_for($domain_body, $test_whsec);
@@ -383,6 +408,20 @@ $addon = $event_addon($sk_settings);
 gf_paystack_test_check(is_array($addon->get_webhook_event($event_body)) && $addon->webhook_mode_value() === 'live', 'sk legacy via get_webhook_event, domain missing');
 $reset_sig_headers();
 
+// domain missing, no whsec: the configured api mode decides, as before
+$both_sk = array('api_mode' => 'test', 'live_secret_key' => $sk_live, 'test_secret_key' => 'sk_test_abc123');
+$_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] = hash_hmac('sha512', $event_body, $sk_live);
+$addon = $event_addon($both_sk);
+gf_paystack_test_check($addon->get_webhook_event($event_body) === false && $addon->webhook_mode_value() === 'test' && strpos($addon->errors[0], 'checks=test:legacy:invalid') !== false, 'domain missing, no whsec: api mode only, no sk try-both');
+$_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] = hash_hmac('sha512', $event_body, 'sk_test_abc123');
+gf_paystack_test_check(is_array($event_addon($both_sk)->get_webhook_event($event_body)), 'domain missing, no whsec: api mode key verifies');
+
+$one_whsec = array('api_mode' => 'live', 'live_secret_key' => $sk_live, 'test_secret_key' => 'sk_test_abc123', 'test_webhook_secret' => $test_whsec);
+$_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] = hash_hmac('sha512', $event_body, $sk_live);
+$addon = $event_addon($one_whsec);
+gf_paystack_test_check($addon->get_webhook_event($event_body) === false && $addon->webhook_mode_value() === 'test' && strpos($addon->errors[0], 'checks=test:whsec:malformed') !== false, 'domain missing: only modes with a whsec are candidates');
+$reset_sig_headers();
+
 // ?secret= must not change the verifying key
 $_GET['secret'] = 'sk_live_attacker';
 $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] = hash_hmac('sha512', $event_body, 'sk_live_attacker');
@@ -396,3 +435,17 @@ unset($_GET['secret']);
 $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] = hash_hmac('sha512', $event_body, $rk_live);
 gf_paystack_test_check($event_addon(array('api_mode' => 'live', 'live_secret_key' => $rk_live))->get_webhook_event($event_body) === false, 'rk only, no whsec: get_webhook_event rejects');
 $reset_sig_headers();
+
+// ?secret= must not reach Paystack calls
+$_GET['secret'] = 'sk_live_attacker';
+$_GET['public'] = 'pk_live_attacker';
+$GLOBALS['gf_paystack_test_caps'] = array('update_core');
+$read_prop = function ($api, $prop) {
+    return (function () use ($prop) {
+        return $this->$prop;
+    })->call($api);
+};
+$qs_addon = $event_addon(array('api_mode' => 'live', 'live_secret_key' => $sk_live, 'live_public_key' => 'pk_live_stored'));
+$qs_api = $qs_addon->paystack_api();
+gf_paystack_test_check($read_prop($qs_api, 'secret_key') === $sk_live && $read_prop($qs_api, 'public_key') === 'pk_live_stored', '?secret= and ?public= ignored when building the API client');
+unset($_GET['secret'], $_GET['public'], $GLOBALS['gf_paystack_test_caps']);

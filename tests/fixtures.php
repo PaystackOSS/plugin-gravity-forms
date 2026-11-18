@@ -193,6 +193,19 @@ class GFPaystackSettingsFixture extends GFPaystack
     public $plans_result = 'ok';
     public $validate_calls = array();
     public $plans_calls = array();
+    public $feeds = array();
+    public $current_feed = false;
+    public $error_log = array();
+
+    public function get_feeds($form_id = null)
+    {
+        return $this->feeds;
+    }
+
+    public function get_current_feed()
+    {
+        return $this->current_feed;
+    }
 
     public function get_posted_settings()
     {
@@ -212,6 +225,7 @@ class GFPaystackSettingsFixture extends GFPaystack
     public function set_field_error($field, $message = '')
     {
         $this->field_errors[$field['name']] = $message;
+        $this->error_log[] = $field['name'];
     }
 
     public function is_detail_page()

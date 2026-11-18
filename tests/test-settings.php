@@ -8,7 +8,7 @@ $st_ws_test = 'whsec_' . str_repeat('a1', 16);
 $st_ws_live = 'whsec_' . str_repeat('b2', 16);
 $st_suffix = ' No settings were saved.';
 
-$st_run = function ($mode, $posted, $stored = array(), $configure = null) {
+$st_run = function ($mode, $posted, $stored = array(), $configure = null, $which = 'both') {
     $GLOBALS['gf_paystack_test_gf_logs'] = array();
     $addon = new GFPaystackSettingsFixture();
     $addon->posted = $posted;
@@ -16,10 +16,11 @@ $st_run = function ($mode, $posted, $stored = array(), $configure = null) {
     if ($configure) {
         $configure($addon);
     }
-    if ($mode === 'test') {
-        $addon->validate_test_secret_key(array());
-    } else {
-        $addon->validate_live_secret_key(array());
+    if ($which !== 'whsec') {
+        $addon->{"validate_{$mode}_secret_key"}(array());
+    }
+    if ($which !== 'key') {
+        $addon->{"validate_{$mode}_webhook_secret"}(array());
     }
 
     return $addon;
@@ -47,7 +48,7 @@ $a = $st_run('live', $rk_posted, array(), $verdict(array('code' => 'invalid_key'
 gf_paystack_test_check(isset($a->field_errors['live_secret_key']) && strpos($a->field_errors['live_secret_key'], 'Paystack didn\'t accept this key.') === 0 && substr($a->field_errors['live_secret_key'], -strlen($st_suffix)) === $st_suffix, 'settings probe invalid_key error');
 
 $a = $st_run('live', $rk_posted, array(), $verdict(array('code' => 'missing_scope', 'scopes' => array('transactions:write'))));
-gf_paystack_test_check($a->field_errors['live_secret_key'] === 'This restricted key can\'t be used: enable Transactions: write. It needs Transactions: read and write. Permissions that can move money aren\'t allowed.' . $st_suffix, 'settings probe missing_scope copy');
+gf_paystack_test_check($a->field_errors['live_secret_key'] === 'This restricted key can\'t be used: enable Transactions: write. It needs Transactions: read and write. Permissions such as transfers, refunds, settlements and payouts aren\'t allowed.' . $st_suffix, 'settings probe missing_scope copy');
 
 $a = $st_run('live', $rk_posted, array(), $verdict(array('code' => 'sensitive_scope', 'sensitive_scopes' => array('transfers', 'disputes_refunds'))));
 gf_paystack_test_check(strpos($a->field_errors['live_secret_key'], 'remove Transfers, Disputes and refunds.') !== false && strpos($a->field_errors['live_secret_key'], 'enable') === false, 'settings probe sensitive_scope copy');
@@ -79,6 +80,59 @@ gf_paystack_test_check($a->field_errors['live_secret_key'] === 'This is a test k
 $a = $st_run('test', array('test_secret_key' => 'garbage'));
 gf_paystack_test_check($a->field_errors['test_secret_key'] === 'Secret keys start with sk_test_ and restricted keys with rk_test_. Check you copied the whole key.' . $st_suffix, 'settings invalid_format copy');
 
+// Each callback reports only its own codes.
+$a = $st_run('test', array('test_secret_key' => $st_rk_test, 'test_webhook_secret' => ''), array(), null, 'key');
+gf_paystack_test_check($a->error_log === array() && $a->validate_calls === array(), 'settings key callback ignores whsec codes');
+$a = $st_run('test', array('test_secret_key' => $st_rk_test, 'test_webhook_secret' => ''), array(), null, 'whsec');
+gf_paystack_test_check($a->error_log === array('test_webhook_secret'), 'settings whsec callback reports whsec codes once');
+$a = $st_run('live', array('live_secret_key' => $st_sk_test), array(), null, 'whsec');
+gf_paystack_test_check($a->error_log === array(), 'settings whsec callback ignores key codes');
+$a = $st_run('live', array('live_secret_key' => $st_sk_test));
+gf_paystack_test_check($a->error_log === array('live_secret_key'), 'settings key code is reported once across both callbacks');
+$a = $st_run('live', $rk_posted, array(), $verdict(array('code' => 'invalid_key')));
+gf_paystack_test_check($a->error_log === array('live_secret_key'), 'settings probe result is reported once across both callbacks');
+$a = $st_run('live', array('live_secret_key' => $st_sk_live, 'live_webhook_secret' => 'nope'), array(), null, 'key');
+gf_paystack_test_check($a->error_log === array(), 'settings key callback silent on bad whsec shape');
+
+// Plans check on save.
+$sub_feed = function ($mode, $active = '1', $type = 'subscription') {
+    return array('is_active' => $active, 'meta' => array('transactionType' => $type) + ($mode === null ? array() : array('mode' => $mode)));
+};
+$with_feeds = function ($feeds, $plans = 'ok') use ($verdict) {
+    return function ($addon) use ($feeds, $plans) {
+        $addon->feeds = $feeds;
+        $addon->plans_result = $plans;
+    };
+};
+
+$a = $st_run('live', $rk_posted, array(), $with_feeds(array($sub_feed('live'))), 'key');
+gf_paystack_test_check($a->field_errors === array() && $a->plans_calls === array($st_rk_live), 'settings save probes plans for an active subscription feed in that mode');
+
+$a = $st_run('live', $rk_posted, array(), $with_feeds(array($sub_feed(null))), 'key');
+gf_paystack_test_check($a->plans_calls === array($st_rk_live), 'settings save treats a feed without a mode as live');
+
+$a = $st_run('live', $rk_posted, array(), $with_feeds(array($sub_feed('live')), 'plans_missing'), 'key');
+gf_paystack_test_check($a->field_errors['live_secret_key'] === 'Subscriptions need Plans: write on your live restricted key. Add it in your Paystack Dashboard, then save this feed again.' . $st_suffix, 'settings save plans_missing error on the key field');
+
+$a = $st_run('live', $rk_posted, array(), $with_feeds(array($sub_feed('live')), 'plans_mor'), 'key');
+gf_paystack_test_check($a->field_errors['live_secret_key'] === 'Paystack subscriptions aren\'t available for merchant-of-record accounts.' . $st_suffix, 'settings save plans_mor error on the key field');
+
+$a = $st_run('live', $rk_posted, array(), $with_feeds(array($sub_feed('live')), 'unverifiable'), 'key');
+gf_paystack_test_check(strpos($a->field_errors['live_secret_key'], 'We couldn\'t reach Paystack') === 0, 'settings save plans unverifiable error on the key field');
+
+$a = $st_run('live', $rk_posted, array(), $with_feeds(array($sub_feed('test'), $sub_feed('live', '0'), $sub_feed('live', '1', 'product')), 'plans_missing'), 'key');
+gf_paystack_test_check($a->field_errors === array() && $a->plans_calls === array(), 'settings save skips plans when no active subscription feed uses that mode');
+
+$a2 = $st_run('live', $rk_posted, array(), function ($addon) use ($sub_feed, $verdict) {
+    $addon->feeds = array($sub_feed('live'));
+    $addon->verdict = array_merge($addon->verdict, array('code' => 'invalid_key'));
+    $addon->plans_result = 'plans_missing';
+}, 'key');
+gf_paystack_test_check($a2->plans_calls === array() && strpos($a2->field_errors['live_secret_key'], 'Paystack didn\'t accept this key.') === 0, 'settings save skips plans when the settings probe fails');
+
+$a = $st_run('live', array('live_secret_key' => $st_rk_live, 'live_webhook_secret' => $st_ws_live), array('live_secret_key' => $st_rk_live), $with_feeds(array($sub_feed('live')), 'plans_missing'), 'key');
+gf_paystack_test_check($a->plans_calls === array() && $a->field_errors === array(), 'settings save skips plans for an unchanged key');
+
 $GLOBALS['gf_paystack_test_filters'] = array('gform_paystack_restricted_keys_enabled' => false);
 $a = $st_run('live', $rk_posted);
 gf_paystack_test_check(isset($a->field_errors['live_secret_key']) && strpos($a->field_errors['live_secret_key'], 'Restricted keys are turned off on this site.') === 0 && $a->validate_calls === array(), 'settings gate off new rk rejected');
@@ -100,7 +154,7 @@ foreach (array('test_secret_key', 'live_secret_key', 'test_webhook_secret', 'liv
 gf_paystack_test_check($pw_ok, 'settings secret and whsec fields are password inputs');
 $order = array_keys($by_name);
 gf_paystack_test_check(array_search('test_webhook_secret', $order) === array_search('test_secret_key', $order) + 1 && array_search('live_webhook_secret', $order) === array_search('live_secret_key', $order) + 1, 'settings whsec fields follow their secret key');
-gf_paystack_test_check($by_name['test_secret_key']['label'] === 'Test Secret or Restricted Key' && $by_name['live_webhook_secret']['label'] === 'Live Webhook Signing Secret' && strpos($by_name['live_secret_key']['tooltip'], 'A restricted key lets this plugin take payments and nothing else.') !== false, 'settings labels and help text');
+gf_paystack_test_check($by_name['test_secret_key']['label'] === 'Test Secret or Restricted Key' && $by_name['live_webhook_secret']['label'] === 'Live Webhook Signing Secret' && strpos($by_name['live_secret_key']['tooltip'], 'A restricted key limits what this plugin can do with your Paystack account.') !== false, 'settings labels and help text');
 
 // Feed.
 $feed = function ($posted, $stored, $plans = 'ok') {
@@ -131,6 +185,99 @@ gf_paystack_test_check($a->field_errors === array() && $a->plans_calls === array
 
 $a = $feed(array('transactionType' => 'product', 'mode' => 'test'), array('test_secret_key' => $st_rk_test), 'plans_missing');
 gf_paystack_test_check($a->field_errors === array() && $a->plans_calls === array(), 'feed product rk no probe');
+
+
+// Feed: own validity of the transactionType field.
+$feed_field = array('name' => 'transactionType', 'choices' => array(array('label' => 'Products', 'value' => 'product'), array('label' => 'Subscription', 'value' => 'subscription')));
+$feed_run = function ($posted, $stored, $plans = 'ok', $configure = null, $field = null) use ($feed_field) {
+    $addon = new GFPaystackSettingsFixture();
+    $addon->posted = $posted;
+    $addon->stored = $stored;
+    $addon->plans_result = $plans;
+    if ($configure) {
+        $configure($addon);
+    }
+    $addon->validate_subscription_plans($field === null ? $feed_field : $field);
+
+    return $addon;
+};
+
+foreach (array('empty' => '', 'missing' => null, 'unknown' => 'donation', 'array' => array('subscription')) as $label => $bad) {
+    $posted = $bad === null ? array('mode' => 'test') : array('transactionType' => $bad, 'mode' => 'test');
+    $a = $feed_run($posted, array('test_secret_key' => $st_rk_test));
+    gf_paystack_test_check($a->field_errors === array('transactionType' => 'This field is required.') && $a->plans_calls === array(), "feed $label transactionType is a required error");
+}
+
+$a = $feed_run(array('transactionType' => 'donation'), array(), 'ok', null, array('name' => 'transactionType'));
+gf_paystack_test_check($a->field_errors === array('transactionType' => 'This field is required.'), 'feed without choices accepts only product or subscription');
+$a = $feed_run(array('transactionType' => 'product'), array(), 'ok', null, array('name' => 'transactionType'));
+gf_paystack_test_check($a->field_errors === array(), 'feed without choices accepts product');
+
+// Feed: probe only when something changed.
+$stored_feed = function ($type, $mode) {
+    return array('id' => 4, 'meta' => array('transactionType' => $type, 'mode' => $mode));
+};
+$with_current = function ($current) {
+    return function ($addon) use ($current) {
+        $addon->current_feed = $current;
+    };
+};
+
+$a = $feed_run($sub_test, array('test_secret_key' => $st_rk_test), 'plans_missing', $with_current($stored_feed('subscription', 'test')));
+gf_paystack_test_check($a->field_errors === array() && $a->plans_calls === array(), 'feed unchanged subscription feed is not probed');
+
+$a = $feed_run($sub_test, array('test_secret_key' => $st_rk_test, 'live_secret_key' => $st_rk_live), 'plans_missing', $with_current($stored_feed('subscription', 'live')));
+gf_paystack_test_check(isset($a->field_errors['transactionType']) && $a->plans_calls === array($st_rk_test), 'feed changed mode is probed');
+
+$a = $feed_run($sub_test, array('test_secret_key' => $st_rk_test), 'ok', $with_current($stored_feed('product', 'test')));
+gf_paystack_test_check($a->plans_calls === array($st_rk_test), 'feed changed to subscription is probed');
+
+$a = $feed_run(array('transactionType' => 'subscription'), array('live_secret_key' => $st_rk_live), 'ok', $with_current($stored_feed('subscription', 'test')));
+gf_paystack_test_check($a->plans_calls === array($st_rk_live), 'feed posted without mode compares as live');
+
+$a = $feed_run(array('transactionType' => 'subscription'), array('live_secret_key' => $st_rk_live), 'plans_missing', $with_current($stored_feed('subscription', 'live')));
+gf_paystack_test_check($a->plans_calls === array(), 'feed unchanged live default is not probed');
+
+// Feed: wiring and chaining.
+class GFPaystackFeedWiringFixture extends GFPaystackSettingsFixture
+{
+    public $parent_calls = 0;
+
+    public function parent_callback($field)
+    {
+        $this->parent_calls++;
+    }
+
+    public function feed_settings_fields()
+    {
+        return parent::feed_settings_fields();
+    }
+}
+
+$wired = new GFPaystackFeedWiringFixture();
+$wired_fields = $wired->feed_settings_fields();
+$wired_type = $wired->get_field('transactionType', $wired_fields);
+gf_paystack_test_check(is_array($wired_type) && $wired_type['validation_callback'] === array($wired, 'validate_subscription_plans'), 'feed_settings_fields wires validate_subscription_plans onto transactionType');
+
+class GFPaystackFeedChainFixture extends GFPaystackFeedWiringFixture
+{
+    public function get_field($name, $fields)
+    {
+        $field = parent::get_field($name, $fields);
+        if ($name === 'transactionType' && is_array($field) && !isset($field['validation_callback'])) {
+            $field['validation_callback'] = array($this, 'parent_callback');
+        }
+
+        return $field;
+    }
+}
+
+$chained = new GFPaystackFeedChainFixture();
+$chained->posted = array('transactionType' => 'product');
+$chained_fields = $chained->feed_settings_fields();
+$chained_type = $chained->get_field('transactionType', $chained_fields);
+$chained->validate_subscription_plans($chained_type);
+gf_paystack_test_check($chained->parent_calls === 1 && $chained->field_errors === array(), 'feed existing transactionType callback is still called');
 
 $GLOBALS['gf_paystack_test_saved_settings'] = null;
 $st_saver = new GFPaystackSettingsFixture();
