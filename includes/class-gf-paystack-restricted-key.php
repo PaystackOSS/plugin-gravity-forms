@@ -71,10 +71,6 @@ if (!class_exists('GF_Paystack_Restricted_Key')) {
         public static function validate($key, $request = null)
         {
             try {
-                if (!is_callable($request)) {
-                    $request = array(__CLASS__, 'default_request');
-                }
-
                 $results = array();
                 $baseline = null;
 
@@ -98,17 +94,13 @@ if (!class_exists('GF_Paystack_Restricted_Key')) {
 
                 return self::decide($results);
             } catch (\Throwable $e) {
-                return self::verdict('unverifiable', array(), array(), 'transient');
+                return self::verdict('unverifiable', array(), array('reason' => 'transient'));
             }
         }
 
         public static function probe_plans($key, $request = null)
         {
             try {
-                if (!is_callable($request)) {
-                    $request = array(__CLASS__, 'default_request');
-                }
-
                 if (!self::budget_left()) {
                     return 'unverifiable';
                 }
@@ -154,6 +146,10 @@ if (!class_exists('GF_Paystack_Restricted_Key')) {
 
         private static function send($request, $key, $method, $path, $body)
         {
+            if (!is_callable($request)) {
+                $request = array(__CLASS__, 'default_request');
+            }
+
             $headers = apply_filters('gf_paystack_request_headers', array('Authorization' => 'Bearer ' . $key, 'Content-Type' => 'application/json'));
             if (!is_array($headers)) {
                 $headers = array();
@@ -225,7 +221,7 @@ if (!class_exists('GF_Paystack_Restricted_Key')) {
         private static function decide($results)
         {
             if ($results[0]['outcome'] === 'invalid') {
-                return self::verdict('invalid_key', array(), array(), null, $results);
+                return self::verdict('invalid_key', $results);
             }
 
             $missing = array();
@@ -243,10 +239,10 @@ if (!class_exists('GF_Paystack_Restricted_Key')) {
             }
 
             if ($missing) {
-                return self::verdict('missing_scope', $missing, $sensitive, null, $results);
+                return self::verdict('missing_scope', $results, array('scopes' => $missing, 'sensitive_scopes' => $sensitive));
             }
             if ($sensitive) {
-                return self::verdict('sensitive_scope', array(), $sensitive, null, $results);
+                return self::verdict('sensitive_scope', $results, array('sensitive_scopes' => $sensitive));
             }
             if ($indeterminate) {
                 $reason = 'transient';
@@ -256,13 +252,13 @@ if (!class_exists('GF_Paystack_Restricted_Key')) {
                     }
                 }
 
-                return self::verdict('unverifiable', array(), array(), $reason, $results);
+                return self::verdict('unverifiable', $results, array('reason' => $reason));
             }
 
-            return self::verdict('ok', array(), array(), null, $results);
+            return self::verdict('ok', $results);
         }
 
-        private static function verdict($code, $scopes, $sensitive_scopes, $reason, $results = array())
+        private static function verdict($code, $results = array(), $extra = array())
         {
             $parts = array();
             foreach ($results as $r) {
@@ -271,13 +267,9 @@ if (!class_exists('GF_Paystack_Restricted_Key')) {
                 }
             }
 
-            return array(
-                'code' => $code,
-                'scopes' => $scopes,
-                'sensitive_scopes' => $sensitive_scopes,
-                'reason' => $reason,
-                'probes' => $parts ? implode(',', $parts) : '-',
-            );
+            $defaults = array('scopes' => array(), 'sensitive_scopes' => array(), 'reason' => null);
+
+            return array('code' => $code) + array_merge($defaults, $extra) + array('probes' => $parts ? implode(',', $parts) : '-');
         }
     }
 }

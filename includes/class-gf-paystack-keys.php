@@ -9,24 +9,25 @@ if (!class_exists('GF_Paystack_Keys')) {
         const RK_SHAPE = '/^rk_(?:test|live)_[\x21\x23-\x26\x28-\x3b\x3d\x3f-\x5b\x5d-\x7e]{16,256}$/';
         const WHSEC_SHAPE = '/^whsec_[A-Za-z0-9_]{16,}$/';
         // A prefix glued to a word (`task_live_`) isn't a key, but one after a %XX escape (`secret%3Dsk_live_`) is.
-        const REDACT_PATTERN = '/(?<!(?<!%[0-9A-Fa-f])[A-Za-z0-9])(?:(?:sk|rk|pk)_(?:live|test)_|whsec_)[^\s"\'<>]+/';
+        const REDACT_PATTERN = '/(?<!(?<!%[0-9A-Fa-f])[A-Za-z0-9])((?:sk|rk|pk)_(?:live|test)_|whsec_)[^\s"\'<>]+/';
 
         public static function type($key)
         {
-            if (is_string($key) && preg_match('/^(sk|rk)_(?:live|test)_/', $key, $m)) {
-                return $m[1];
-            }
-
-            return null;
+            return self::parse($key)[0];
         }
 
         public static function mode($key)
         {
-            if (is_string($key) && preg_match('/^(?:sk|rk)_(live|test)_/', $key, $m)) {
-                return $m[1];
+            return self::parse($key)[1];
+        }
+
+        private static function parse($key)
+        {
+            if (is_string($key) && preg_match('/^(sk|rk)_(live|test)_/', $key, $m)) {
+                return array($m[1], $m[2]);
             }
 
-            return null;
+            return array(null, null);
         }
 
         public static function is_whsec_shaped($value)
@@ -87,14 +88,16 @@ if (!class_exists('GF_Paystack_Keys')) {
                 return $string;
             }
 
+            if (strpos($string, '_live_') === false && strpos($string, '_test_') === false && strpos($string, 'whsec_') === false) {
+                return $string;
+            }
+
             return preg_replace_callback(self::REDACT_PATTERN, array(__CLASS__, 'redact_match'), $string);
         }
 
         private static function redact_match($match)
         {
-            preg_match('/^(?:(?:sk|rk|pk)_(?:live|test)_|whsec_)/', $match[0], $prefix);
-
-            return $prefix[0] . '[redacted]';
+            return $match[1] . '[redacted]';
         }
 
         private static function result($probe, $error)

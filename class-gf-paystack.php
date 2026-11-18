@@ -1761,27 +1761,7 @@ class GFPaystack extends GFPaymentAddOn
 
         $settings = $this->get_plugin_settings();
 
-        $domain_mode = self::resolve_webhook_mode(rgars($response, 'data/domain'));
-
-        if ($domain_mode) {
-            $candidates = array($domain_mode);
-        } else {
-            $candidates = array();
-            foreach (array('live', 'test') as $candidate_mode) {
-                if ($this->get_webhook_secret($candidate_mode, $settings) !== '') {
-                    $candidates[] = $candidate_mode;
-                }
-            }
-
-            $api_mode = $this->get_api_mode($settings);
-            if (!in_array($api_mode, $candidates, true)) {
-                $candidates[] = $api_mode;
-            }
-        }
-
-        if (empty($candidates)) {
-            $candidates = array($this->get_api_mode($settings));
-        }
+        $candidates = $this->webhook_candidate_modes($response, $settings);
 
         $check = null;
         $mode = null;
@@ -1789,7 +1769,6 @@ class GFPaystack extends GFPaymentAddOn
         foreach ($candidates as $candidate_mode) {
             $this->paystack_api($candidate_mode, $settings);
 
-            // Validate Webhook Request Payload
             try {
                 $is_verified = $this->paystack_api->validate_webhook($body);
             } catch (\Exception $e) {
@@ -1819,11 +1798,34 @@ class GFPaystack extends GFPaymentAddOn
             return false;
         }
 
-        $this->log_debug(sprintf('%s(): Webhook verified. sig=%s result=%s', __METHOD__, rgar($check, 'sig'), rgar($check, 'result')));
-
-        $this->log_debug(__METHOD__ . "(): Processing {$this->webhook_mode} mode event.");
+        $this->log_debug(sprintf('%s(): Webhook verified. Processing %s mode event. sig=%s result=%s', __METHOD__, $this->webhook_mode, rgar($check, 'sig'), rgar($check, 'result')));
 
         return $response;
+    }
+
+    /**
+     * A payload's own domain decides the mode; otherwise try each mode with a signing secret, then the global mode.
+     */
+    private function webhook_candidate_modes($response, $settings)
+    {
+        $domain_mode = self::resolve_webhook_mode(rgars($response, 'data/domain'));
+        if ($domain_mode) {
+            return array($domain_mode);
+        }
+
+        $candidates = array();
+        foreach (array('live', 'test') as $candidate_mode) {
+            if ($this->get_webhook_secret($candidate_mode, $settings) !== '') {
+                $candidates[] = $candidate_mode;
+            }
+        }
+
+        $api_mode = $this->get_api_mode($settings);
+        if (!in_array($api_mode, $candidates, true)) {
+            $candidates[] = $api_mode;
+        }
+
+        return $candidates;
     }
 
     /**
@@ -2063,28 +2065,20 @@ class GFPaystack extends GFPaymentAddOn
         return $this->paystack_api = new GFPaystackApi($config);
     }
 
-    /**
-     * Reads straight from stored settings.
-     *
-     * @param string     $mode
-     * @param array|null $settings
-     *
-     * @return string
-     */
     public function get_webhook_secret($mode, $settings = null)
     {
-        return trim((string) rgar(empty($settings) ? $this->get_plugin_settings() : $settings, "{$mode}_webhook_secret"));
+        return $this->stored_setting("{$mode}_webhook_secret", $settings);
     }
 
-    /**
-     * @param string     $mode
-     * @param array|null $settings
-     *
-     * @return string
-     */
     public function get_stored_secret_key($mode, $settings = null)
     {
-        return trim((string) rgar(empty($settings) ? $this->get_plugin_settings() : $settings, "{$mode}_secret_key"));
+        return $this->stored_setting("{$mode}_secret_key", $settings);
+    }
+
+    // Reads straight from stored settings.
+    private function stored_setting($name, $settings)
+    {
+        return trim((string) rgar(empty($settings) ? $this->get_plugin_settings() : $settings, $name));
     }
 
     // # KEY VALIDATION ------------------------------------------------------------------------------------------------
@@ -2092,8 +2086,6 @@ class GFPaystack extends GFPaymentAddOn
     /**
      * Validation compares trimmed values, so store them trimmed too: a pasted key with a trailing space would
      * otherwise pass validation but break the Authorization header.
-     *
-     * @param array $settings
      */
     public function update_plugin_settings($settings)
     {
@@ -2128,14 +2120,8 @@ class GFPaystack extends GFPaymentAddOn
         $this->validate_webhook_secret_for_mode('live');
     }
 
-    /**
-     * @param string $mode 'test' or 'live'.
-     *
-     * @return array A GF_Paystack_Keys::resolve_save() result.
-     */
     protected function resolve_posted_key($mode)
     {
-        $other    = $mode === 'test' ? 'live' : 'test';
         $settings = $this->get_posted_settings();
 
         return GF_Paystack_Keys::resolve_save(
@@ -2143,40 +2129,28 @@ class GFPaystack extends GFPaymentAddOn
             trim((string) rgar($settings, "{$mode}_secret_key")),
             $this->get_plugin_setting("{$mode}_secret_key"),
             rgar($settings, "{$mode}_webhook_secret"),
-            rgar($settings, "{$other}_webhook_secret"),
+            rgar($settings, $this->other_mode($mode) . '_webhook_secret'),
             GF_Paystack_Keys::restricted_keys_enabled()
         );
     }
 
-    /**
-     * @param string $mode 'test' or 'live'.
-     *
-     * @return void
-     */
     protected function validate_webhook_secret_for_mode($mode)
     {
         $result = $this->resolve_posted_key($mode);
 
         if ($result['error'] !== null && strpos($result['error'], 'whsec_') === 0) {
-            $other = $mode === 'test' ? 'live' : 'test';
-            $this->set_field_error(array('name' => "{$mode}_webhook_secret"), $this->key_error_message($result['error'], $mode, $other) . $this->not_saved_suffix());
+            $this->set_save_error("{$mode}_webhook_secret", $this->key_error_message($result['error'], $mode));
         }
     }
 
-    /**
-     * @param string $mode 'test' or 'live'.
-     *
-     * @return void
-     */
     protected function validate_secret_key_for_mode($mode)
     {
-        $other  = $mode === 'test' ? 'live' : 'test';
         $key    = trim((string) rgar($this->get_posted_settings(), "{$mode}_secret_key"));
         $result = $this->resolve_posted_key($mode);
 
         if ($result['error'] !== null) {
             if (strpos($result['error'], 'whsec_') !== 0) {
-                $this->set_field_error(array('name' => "{$mode}_secret_key"), $this->key_error_message($result['error'], $mode, $other) . $this->not_saved_suffix());
+                $this->set_save_error("{$mode}_secret_key", $this->key_error_message($result['error'], $mode));
             }
             return;
         }
@@ -2189,23 +2163,18 @@ class GFPaystack extends GFPaymentAddOn
         $this->log_debug("rk validate mode={$mode} code={$verdict['code']} probes={$verdict['probes']}");
 
         if ($verdict['code'] !== 'ok') {
-            $this->set_field_error(array('name' => "{$mode}_secret_key"), $this->probe_error_message($verdict) . $this->not_saved_suffix());
+            $this->set_save_error("{$mode}_secret_key", $this->probe_error_message($verdict));
             return;
         }
 
         if ($this->has_subscription_feed($mode)) {
             $plans = $this->probe_restricted_key_plans($key);
             if ($plans !== 'ok') {
-                $this->set_field_error(array('name' => "{$mode}_secret_key"), $this->plans_error_message($plans, $mode, 'settings') . $this->not_saved_suffix());
+                $this->set_save_error("{$mode}_secret_key", $this->plans_error_message($plans, $mode, 'settings'));
             }
         }
     }
 
-    /**
-     * @param string $mode 'test' or 'live'.
-     *
-     * @return bool
-     */
     protected function has_subscription_feed($mode)
     {
         foreach ((array) $this->get_feeds() as $feed) {
@@ -2217,36 +2186,22 @@ class GFPaystack extends GFPaymentAddOn
         return false;
     }
 
-    /**
-     * @param array|false $feed
-     *
-     * @return string 'test' or 'live'; a feed without a mode follows the global API mode.
-     */
+    // A feed without a mode follows the global API mode.
     protected function feed_mode($feed)
     {
-        $mode = rgars($feed, 'meta/mode');
-        if ($mode === 'test' || $mode === 'live') {
+        $mode = self::resolve_webhook_mode(rgars($feed, 'meta/mode'));
+        if ($mode) {
             return $mode;
         }
 
         return $this->get_api_mode($this->get_plugin_settings()) === 'test' ? 'test' : 'live';
     }
 
-    /**
-     * @param string $key
-     *
-     * @return array
-     */
     protected function validate_restricted_key($key)
     {
         return GF_Paystack_Restricted_Key::validate($key);
     }
 
-    /**
-     * @param string $key
-     *
-     * @return string
-     */
     protected function probe_restricted_key_plans($key)
     {
         return GF_Paystack_Restricted_Key::probe_plans($key);
@@ -2254,11 +2209,6 @@ class GFPaystack extends GFPaymentAddOn
 
     /**
      * Subscription feeds need Plans: write, which the settings probe doesn't check.
-     *
-     * @param array|object $field The transactionType field.
-     * @param mixed        $value The submitted value, when the caller passes one.
-     *
-     * @return void
      */
     public function validate_subscription_plans($field, $value = null)
     {
@@ -2304,21 +2254,12 @@ class GFPaystack extends GFPaymentAddOn
         }
     }
 
-    /**
-     * @param string $result A probe_plans() code other than 'ok'.
-     * @param string $mode    'test' or 'live'.
-     * @param string $context 'feed' or 'settings'.
-     *
-     * @return string
-     */
     protected function plans_error_message($result, $mode, $context = 'feed')
     {
         if ($result === 'plans_missing') {
-            if ($context === 'settings') {
-                return sprintf(esc_html__('Subscriptions need Plans: write on your %s restricted key. Add it in your Paystack Dashboard, then save these settings again.', 'gravityformspaystack'), $mode);
-            }
+            $again = $context === 'settings' ? __('these settings', 'gravityformspaystack') : __('this feed', 'gravityformspaystack');
 
-            return sprintf(esc_html__('Subscriptions need Plans: write on your %s restricted key. Add it in your Paystack Dashboard, then save this feed again.', 'gravityformspaystack'), $mode);
+            return sprintf(esc_html__('Subscriptions need Plans: write on your %1$s restricted key. Add it in your Paystack Dashboard, then save %2$s again.', 'gravityformspaystack'), $mode, esc_html($again));
         }
 
         if ($result === 'plans_mor') {
@@ -2328,26 +2269,21 @@ class GFPaystack extends GFPaymentAddOn
         return esc_html__('We couldn\'t reach Paystack to check this key. Please try again.', 'gravityformspaystack');
     }
 
-    /**
-     * @return string
-     */
-    protected function not_saved_suffix()
+    protected function set_save_error($field_name, $message)
     {
-        return ' ' . esc_html__('No settings were saved.', 'gravityformspaystack');
+        $this->set_field_error(array('name' => $field_name), $message . ' ' . esc_html__('No settings were saved.', 'gravityformspaystack'));
     }
 
-    /**
-     * @param string $code  A GF_Paystack_Keys::resolve_save() error code.
-     * @param string $mode
-     * @param string $other
-     *
-     * @return string
-     */
-    protected function key_error_message($code, $mode, $other)
+    private function other_mode($mode)
+    {
+        return $mode === 'test' ? 'live' : 'test';
+    }
+
+    protected function key_error_message($code, $mode)
     {
         switch ($code) {
             case 'wrong_field':
-                return sprintf(esc_html__('This is a %1$s key. Paste it in the %1$s secret key field.', 'gravityformspaystack'), $other);
+                return sprintf(esc_html__('This is a %1$s key. Paste it in the %1$s secret key field.', 'gravityformspaystack'), $this->other_mode($mode));
             case 'invalid_format':
                 return sprintf(esc_html__('Secret keys start with sk_%1$s_ and restricted keys with rk_%1$s_. Check you copied the whole key.', 'gravityformspaystack'), $mode);
             case 'rk_disabled':
@@ -2363,11 +2299,6 @@ class GFPaystack extends GFPaymentAddOn
         return esc_html__('Paystack didn\'t accept this key.', 'gravityformspaystack');
     }
 
-    /**
-     * @param array $verdict A GF_Paystack_Restricted_Key::validate() result.
-     *
-     * @return string
-     */
     protected function probe_error_message($verdict)
     {
         switch ($verdict['code']) {
@@ -2392,11 +2323,6 @@ class GFPaystack extends GFPaymentAddOn
         return esc_html__('We couldn\'t reach Paystack to check this key. Please try again.', 'gravityformspaystack');
     }
 
-    /**
-     * @param array $scopes Scope ids.
-     *
-     * @return string
-     */
     protected function scope_labels($scopes)
     {
         $out = array();
