@@ -12,6 +12,26 @@ License URI: http://www.gnu.org/licenses/gpl-2.0.html
 == Description ==
 The Paystack Addon for Gravity Forms allows you to quickly and easily implement credit card payments with WordPress. With the Paystack Add-On you can capture one time credit card payments or setup recurring payment subscriptions.
 
+= Restricted keys =
+You can use a Paystack restricted key instead of your full secret key. Paste an `rk_test_...` or `rk_live_...` key into the matching Test or Live Secret key field.
+
+* The key needs Transactions: read and write permissions, plus Plans: write if you sell subscriptions.
+* Keys with permissions that can move money (transfers, refunds, settlements, payouts and similar) are rejected.
+* The key is checked with Paystack when you save it, and only then. If you change its permissions later in the Paystack Dashboard, it is not checked again.
+* A restricted key needs the Webhook signing secret for the same mode (see below).
+
+= Webhook signing secret =
+The Test and Live settings have a "Webhook signing secret" field. Copy the `whsec_...` value from Settings > API Keys & Webhooks in your Paystack Dashboard.
+
+* It is required when you use a restricted key, and optional when you use a secret key.
+* Once it is set, webhooks are only accepted with a valid Paystack-Signature header that was signed within the last 5 minutes.
+* Successful-payment webhooks are confirmed with Paystack before an entry is marked as paid.
+
+= For developers =
+Restricted keys can be turned off with the `gform_paystack_restricted_keys_enabled` filter (default `true`). Restricted keys that were already saved keep working.
+
+`add_filter( 'gform_paystack_restricted_keys_enabled', '__return_false' );`
+
 
 == Installation ==
  
@@ -53,6 +73,13 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 
 == Changelog ==
+
+= Unreleased =
+* Added support for Paystack restricted keys (`rk_test_...` / `rk_live_...`).
+* Added Test and Live webhook signing secret fields, and webhook signature verification when one is set.
+* Successful-payment (charge.success) webhooks are now confirmed with Paystack before an entry is marked as paid.
+* Keys and signing secrets are hidden in logs.
+* The key fields are now password inputs.
 
 = 2.0.9 - October 28, 2026 =
 * Fixed a fatal error on the confirmation page after a successful payment when the usage tracking service is unreachable.
