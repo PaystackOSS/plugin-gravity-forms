@@ -58,3 +58,29 @@ foreach ($keys_redact_cases as $label => $case) {
     gf_paystack_test_check(GF_Paystack_Keys::redact($case[0]) === $case[1], 'keys redact ' . $label);
 }
 gf_paystack_test_check(GF_Paystack_Keys::redact(array('sk_live_abc')) === array('sk_live_abc') && GF_Paystack_Keys::redact(null) === null, 'keys redact non-strings');
+
+// # Coverage additions (dedicated test pass)
+gf_paystack_test_check(GF_Paystack_Keys::mode('sk_livefoo') === null && GF_Paystack_Keys::type('sk_livefoo') === null, 'keys prefix needs the trailing underscore');
+$keys_extra = array(
+    'prefix without trailing underscore' => array(array('test', 'sk_livefoo', '', '', '', true), false, 'invalid_format'),
+    'rk body at 256 chars' => array(array('live', 'rk_live_' . str_repeat('a', 256), '', $whsec_a, '', true), true, null),
+    'rk body over 256 chars' => array(array('live', 'rk_live_' . str_repeat('a', 257), '', $whsec_a, '', true), false, 'invalid_format'),
+    'rk at 16 chars' => array(array('live', 'rk_live_' . str_repeat('a', 16), '', $whsec_a, '', true), true, null),
+    'rk at 15 chars' => array(array('live', 'rk_live_' . str_repeat('a', 15), '', $whsec_a, '', true), false, 'invalid_format'),
+    'blank whsec on both sides is not a duplicate' => array(array('live', $sk_live, $sk_live, '', '', true), false, null),
+    'whsec at 16 chars' => array(array('live', $sk_live, $sk_live, 'whsec_' . str_repeat('a', 16), '', true), false, null),
+    'whsec at 15 chars' => array(array('live', $sk_live, $sk_live, 'whsec_' . str_repeat('a', 15), '', true), false, 'whsec_format'),
+    'whitespace-only other whsec is blank' => array(array('live', $sk_live, $sk_live, $whsec_a, '   ', true), false, null),
+    'rk error reports no probe' => array(array('live', $rk_live, '', '', '', true), false, 'whsec_required'),
+);
+foreach ($keys_extra as $label => $case) {
+    $result = call_user_func_array(array('GF_Paystack_Keys', 'resolve_save'), $case[0]);
+    gf_paystack_test_check($result === array('probe' => $case[1], 'error' => $case[2]), 'keys resolve_save ' . $label);
+}
+
+$GLOBALS['gf_paystack_test_filters']['gform_paystack_restricted_keys_enabled'] = false;
+gf_paystack_test_check(GF_Paystack_Keys::restricted_keys_enabled() === false, 'keys gate filter can turn restricted keys off');
+unset($GLOBALS['gf_paystack_test_filters']['gform_paystack_restricted_keys_enabled']);
+
+gf_paystack_test_check(GF_Paystack_Keys::redact('a sk_live_abc and rk_test_def and whsec_ghi') === 'a sk_live_[redacted] and rk_test_[redacted] and whsec_[redacted]', 'keys redact several secrets in one string');
+gf_paystack_test_check(GF_Paystack_Keys::redact('sk_live_abc"') === 'sk_live_[redacted]"', 'keys redact stops at a closing quote');

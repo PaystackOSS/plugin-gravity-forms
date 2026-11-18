@@ -449,3 +449,64 @@ $qs_addon = $event_addon(array('api_mode' => 'live', 'live_secret_key' => $sk_li
 $qs_api = $qs_addon->paystack_api();
 gf_paystack_test_check($read_prop($qs_api, 'secret_key') === $sk_live && $read_prop($qs_api, 'public_key') === 'pk_live_stored', '?secret= and ?public= ignored when building the API client');
 unset($_GET['secret'], $_GET['public'], $GLOBALS['gf_paystack_test_caps']);
+
+// # Coverage additions (dedicated test pass)
+
+// Legacy HMAC key is the stored sk, never the (possibly overridden) API-call key.
+$legacy_cfg = new GFPaystackApi((object) array('secret_key' => 'sk_live_callkey', 'public_key' => 'pk', 'stored_secret_key' => $sk_live));
+gf_paystack_test_check($legacy_cfg->validate_webhook($webhook_body, hash_hmac('sha512', $webhook_body, $sk_live)) === true, 'legacy HMAC verifies with the stored sk');
+gf_paystack_test_check($legacy_cfg->validate_webhook($webhook_body, hash_hmac('sha512', $webhook_body, 'sk_live_callkey')) === false, 'legacy HMAC does not verify with the API-call key');
+
+// The fallthrough path records why it rejected.
+$none_api = $whsec_api('', $rk_live);
+$none_api->validate_webhook($webhook_body, 'x');
+gf_paystack_test_check($none_api->last_webhook_check === array('sig' => 'none', 'result' => 'invalid'), 'validate_webhook records none/invalid when neither whsec nor sk is configured');
+$legacy_bad = $whsec_api('', $sk_live);
+$legacy_bad->validate_webhook($webhook_body, 'deadbeef');
+gf_paystack_test_check($legacy_bad->last_webhook_check === array('sig' => 'legacy', 'result' => 'invalid'), 'validate_webhook records legacy/invalid');
+$whsec_bad = $whsec_api($whsec);
+$whsec_bad->validate_webhook($webhook_body, null, "t=$t,$bad_v1");
+gf_paystack_test_check($whsec_bad->last_webhook_check['sig'] === 'whsec' && $whsec_bad->last_webhook_check['result'] === 'invalid', 'validate_webhook records whsec result for an explicit signing header');
+
+// Header parsing details
+$hdr_notices = array();
+set_error_handler(function ($no, $str) use (&$hdr_notices) {
+    $hdr_notices[] = $str;
+
+    return true;
+});
+$junk_result = $api->check_signing_secret_header($webhook_body, "junk,t=$t,$good_v1", $now);
+restore_error_handler();
+gf_paystack_test_check($junk_result === 'valid' && $hdr_notices === array(), 'whsec header part without = is ignored silently');
+gf_paystack_test_check($api->check_signing_secret_header($webhook_body, "t=$t,v1=:" . hash_hmac('sha512', $t . '.' . $webhook_body, $whsec), $now) === 'malformed', 'whsec v1 with empty kid is malformed');
+gf_paystack_test_check($api->check_signing_secret_header($webhook_body, "t=$t,v1=k1:" . str_repeat('a', 64), $now) === 'malformed', 'whsec v1 with 64 hex chars is malformed');
+gf_paystack_test_check($api->check_signing_secret_header($webhook_body, "t=$t,v1=k1:" . strtoupper(hash_hmac('sha512', $t . '.' . $webhook_body, $whsec)), $now) === 'valid', 'whsec uppercase hex signature is accepted');
+
+// Settings values are trimmed before they become secrets
+$ws_padded = array('api_mode' => 'live', 'live_secret_key' => $rk_live, 'live_webhook_secret' => "  $whsec \n");
+$_SERVER['HTTP_PAYSTACK_SIGNATURE'] = $header_for($event_body, $whsec);
+gf_paystack_test_check(is_array($event_addon($ws_padded)->get_webhook_event($event_body)), 'whsec read from settings is trimmed');
+$reset_sig_headers();
+$_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] = hash_hmac('sha512', $event_body, $sk_live);
+gf_paystack_test_check(is_array($event_addon(array('api_mode' => 'live', 'live_secret_key' => "$sk_live \n"))->get_webhook_event($event_body)), 'stored sk read from settings is trimmed for the legacy HMAC');
+$reset_sig_headers();
+
+// A validator that throws becomes a WP_Error
+class GFPaystackThrowingValidatorApi extends GFPaystackApi
+{
+    public function validate_webhook($input, $signature = null, $signing_header = null)
+    {
+        throw new Exception('validator down');
+    }
+}
+class GFPaystackThrowingValidatorAddon extends GFPaystackEventFixture
+{
+    public function paystack_api($mode = null, $settings = null)
+    {
+        return $this->paystack_api = new GFPaystackThrowingValidatorApi((object) array());
+    }
+}
+$throwing_addon = new GFPaystackThrowingValidatorAddon();
+$throwing_addon->settings = array('api_mode' => 'live', 'live_secret_key' => $sk_live);
+$throw_result = $throwing_addon->get_webhook_event($event_body);
+gf_paystack_test_check(is_wp_error($throw_result) && $throw_result->code === 'Webhook Validation Failed' && $throw_result->message === 'validator down' && count($throwing_addon->errors) === 1, 'webhook validator exception returns a WP_Error and is logged');

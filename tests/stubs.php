@@ -16,6 +16,10 @@ if (!function_exists('apply_filters')) {
     function apply_filters($tag, $value)
     {
         $overrides = isset($GLOBALS['gf_paystack_test_filters']) ? $GLOBALS['gf_paystack_test_filters'] : array();
+        if (array_key_exists($tag, $overrides) && $overrides[$tag] instanceof Closure) {
+            return call_user_func($overrides[$tag], $value);
+        }
+
         return array_key_exists($tag, $overrides) ? $overrides[$tag] : $value;
     }
 }

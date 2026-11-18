@@ -284,3 +284,52 @@ $st_saver = new GFPaystackSettingsFixture();
 $st_saver->update_plugin_settings(array('test_secret_key' => "  $st_rk_test\n", 'live_webhook_secret' => " $st_ws_live ", 'api_mode' => ' test '));
 $st_saved = $GLOBALS['gf_paystack_test_saved_settings'];
 gf_paystack_test_check($st_saved['test_secret_key'] === $st_rk_test && $st_saved['live_webhook_secret'] === $st_ws_live && $st_saved['api_mode'] === ' test ', 'settings save trims only credential fields');
+
+// # Coverage additions (dedicated test pass)
+
+// Each credential field is wired to its own callback.
+$wiring_ok = true;
+foreach (array('test_secret_key' => 'validate_test_secret_key', 'live_secret_key' => 'validate_live_secret_key', 'test_webhook_secret' => 'validate_test_webhook_secret', 'live_webhook_secret' => 'validate_live_webhook_secret') as $field_name => $callback) {
+    $wiring_ok = $wiring_ok && isset($by_name[$field_name]['validation_callback']) && $by_name[$field_name]['validation_callback'] === array($fa, $callback);
+}
+gf_paystack_test_check($wiring_ok, 'settings each key and whsec field carries its own validation callback');
+
+// Each callback validates its own mode.
+$a = $st_run('test', array('test_secret_key' => $st_sk_live, 'live_secret_key' => $st_sk_test));
+gf_paystack_test_check($a->error_log === array('test_secret_key'), 'settings test key callback only reports the test field');
+$a = $st_run('live', array('test_secret_key' => $st_sk_live, 'live_secret_key' => $st_sk_test));
+gf_paystack_test_check($a->error_log === array('live_secret_key'), 'settings live key callback only reports the live field');
+$a = $st_run('test', array('test_webhook_secret' => 'nope', 'live_webhook_secret' => 'nope'), array(), null, 'whsec');
+gf_paystack_test_check($a->error_log === array('test_webhook_secret'), 'settings test whsec callback only reports the test field');
+$a = $st_run('live', array('test_webhook_secret' => 'nope', 'live_webhook_secret' => 'nope'), array(), null, 'whsec');
+gf_paystack_test_check($a->error_log === array('live_webhook_secret'), 'settings live whsec callback only reports the live field');
+
+// The mirror image: each mode's rk probe uses its own mode's whsec and stored key.
+$a = $st_run('live', array('live_secret_key' => $st_rk_live, 'live_webhook_secret' => $st_ws_live, 'test_webhook_secret' => $st_ws_live));
+gf_paystack_test_check(isset($a->field_errors['live_webhook_secret']) && $a->validate_calls === array(), 'settings whsec_same is judged against the other mode and blocks the probe');
+$a = $st_run('live', array('live_secret_key' => $st_rk_live, 'live_webhook_secret' => $st_ws_live, 'test_webhook_secret' => $st_ws_test), array('live_secret_key' => $st_rk_test));
+gf_paystack_test_check($a->validate_calls === array($st_rk_live), 'settings a changed key is compared against this mode stored key');
+$a = $st_run('live', array('live_secret_key' => $st_rk_live, 'live_webhook_secret' => $st_ws_live), array('test_secret_key' => $st_rk_live));
+gf_paystack_test_check($a->validate_calls === array($st_rk_live), 'settings stored key of the other mode does not make this key unchanged');
+
+// Feed choices drive the allowed transaction types.
+$custom_field = array('name' => 'transactionType', 'choices' => array(array('label' => 'Donation', 'value' => 'donation'), array('label' => 'Sub', 'value' => 'subscription')));
+$a = $feed_run(array('transactionType' => 'donation'), array(), 'ok', null, $custom_field);
+gf_paystack_test_check($a->field_errors === array(), 'feed accepts a type that is only in the field choices');
+$a = $feed_run(array('transactionType' => 'product'), array(), 'ok', null, $custom_field);
+gf_paystack_test_check($a->field_errors === array('transactionType' => 'This field is required.'), 'feed rejects product when the field choices do not offer it');
+$name_field = array('name' => 'transactionType', 'choices' => array(array('label' => 'Donation', 'name' => 'donation')));
+$a = $feed_run(array('transactionType' => 'donation'), array(), 'ok', null, $name_field);
+gf_paystack_test_check($a->field_errors === array(), 'feed choice without a value falls back to its name');
+
+// Non-array settings pass through untouched.
+$GLOBALS['gf_paystack_test_saved_settings'] = 'unset';
+$st_saver->update_plugin_settings(null);
+gf_paystack_test_check($GLOBALS['gf_paystack_test_saved_settings'] === null, 'settings save passes non-array settings through');
+
+// get_webhook_secret / get_stored_secret_key read per-mode settings and trim.
+$st_reader = new GFPaystackSettingsFixture();
+$st_reader->stored = array('test_webhook_secret' => " $st_ws_test ", 'live_webhook_secret' => $st_ws_live, 'test_secret_key' => " $st_sk_test\n", 'live_secret_key' => $st_rk_live);
+gf_paystack_test_check($st_reader->get_webhook_secret('test') === $st_ws_test && $st_reader->get_webhook_secret('live') === $st_ws_live && $st_reader->get_webhook_secret('live', array()) === $st_ws_live, 'settings get_webhook_secret is per mode, trimmed, and falls back to plugin settings');
+gf_paystack_test_check($st_reader->get_stored_secret_key('test') === $st_sk_test && $st_reader->get_stored_secret_key('live', array('live_secret_key' => 'x')) === 'x', 'settings get_stored_secret_key is per mode, trimmed, and prefers passed settings');
+gf_paystack_test_check($st_reader->get_webhook_secret('test', array('test_webhook_secret' => $st_ws_live)) === $st_ws_live && (new GFPaystackSettingsFixture())->get_webhook_secret('test') === '', 'settings get_webhook_secret prefers passed settings and defaults to blank');

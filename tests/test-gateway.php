@@ -175,3 +175,45 @@ $scalar_thrown = gf_paystack_exception_message(function () use ($log_api) {
 });
 gf_paystack_test_check(strpos($scalar_thrown, 'issue connecting') !== false, 'send_request case: JSON scalar response throws the generic Exception');
 $GLOBALS['gf_paystack_test_remote_response'] = array('body' => json_encode(array('status' => true)));
+
+// # Coverage additions (dedicated test pass): every GFPaystackApi error_log line is redacted.
+$redact_log = tempnam(sys_get_temp_dir(), 'gfpstk');
+$redact_prev = ini_get('error_log');
+ini_set('error_log', $redact_log);
+$redact_api = new GFPaystackApi((object) array('secret_key' => 'sk_live_callkey', 'public_key' => 'pk_live_public'));
+$GLOBALS['gf_paystack_test_remote_response'] = array('response' => array('code' => 200), 'body' => json_encode(array('status' => true, 'message' => 'ok', 'data' => array())));
+$redact_api->send_request('transaction/verify/sk_live_leakinguri99', array(), 'get');
+$redact_contents = (string) file_get_contents($redact_log);
+gf_paystack_test_check(strpos($redact_contents, 'transaction/verify/sk_live_[redacted]') !== false && strpos($redact_contents, 'leakinguri99') === false, 'send_request status log line is redacted');
+
+file_put_contents($redact_log, '');
+$GLOBALS['gf_paystack_test_remote_response'] = array('response' => array('code' => 403), 'body' => json_encode(array('status' => false, 'message' => 'This restricted key is not permitted to perform this action')));
+gf_paystack_exception_message(function () use ($redact_api) {
+    $redact_api->send_request('transaction/verify/rk_live_leakingscope77', array(), 'get');
+});
+$redact_contents = (string) file_get_contents($redact_log);
+gf_paystack_test_check(strpos($redact_contents, 'rk scope denied') !== false && strpos($redact_contents, 'leakingscope77') === false && strpos($redact_contents, 'rk_live_[redacted]') !== false, 'rk scope denied log line is redacted');
+
+class GFPaystackLeakyTrackerApi extends GFPaystackApi
+{
+    public function send_request($endpoint, $args = array(), $method = 'post', $domain = 'https://api.paystack.co/')
+    {
+        throw new Exception('tracker said Bearer sk_live_leakingtracker55');
+    }
+}
+file_put_contents($redact_log, '');
+$leaky = new GFPaystackLeakyTrackerApi((object) array('secret_key' => 'sk', 'public_key' => 'pk'));
+$leaky->log_transaction_success('ref');
+$redact_contents = (string) file_get_contents($redact_log);
+gf_paystack_test_check(strpos($redact_contents, 'plugin tracker request failed') !== false && strpos($redact_contents, 'leakingtracker55') === false, 'plugin tracker failure log line is redacted');
+
+ini_set('error_log', $redact_prev === false ? '' : $redact_prev);
+unlink($redact_log);
+
+// GFPaystack log helpers redact too (including debug lines).
+$GLOBALS['gf_paystack_test_gf_logs'] = array();
+$log_addon = new GFPaystackSettingsFixture();
+$log_addon->log_debug('d rk_live_leakdebug11 whsec_leakdebug22');
+$log_addon->log_error('e sk_test_leakerror33');
+$logged_all = json_encode($GLOBALS['gf_paystack_test_gf_logs']);
+gf_paystack_test_check(count($GLOBALS['gf_paystack_test_gf_logs']) === 2 && strpos($logged_all, 'leakdebug') === false && strpos($logged_all, 'leakerror') === false && strpos($logged_all, 'rk_live_[redacted]') !== false, 'GFPaystack log_debug and log_error redact secrets');

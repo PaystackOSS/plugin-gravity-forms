@@ -213,3 +213,94 @@ $auth_keys = array_filter(array_keys($sent_headers), function ($k) {
     return strtolower($k) === 'authorization';
 });
 gf_paystack_test_check(count($auth_keys) === 1 && $sent_headers['Authorization'] === 'Bearer ' . $rk_key && $sent_headers['X-Extra'] === '1', 'rk probe headers keep a single Authorization with the saved key');
+
+// # Coverage additions (dedicated test pass)
+
+$rk_pinned = array(
+    'transactions:read|required|GET|transaction?perPage=1|2xx',
+    'transactions:write|required|POST|transaction/check_authorization|404_write',
+    'disputes_refunds|sensitive|GET|refund?perPage=1|2xx_or_400',
+    'bulk_charges|sensitive|GET|bulkcharge|2xx_or_400',
+    'direct_debit|sensitive|GET|directdebit/account|2xx_or_400',
+    'preauthorizations|sensitive|GET|preauthorization|2xx_or_400',
+    'settlements|sensitive|GET|settlement?perPage=1|2xx_or_400',
+    'subaccounts|sensitive|GET|subaccount|2xx_or_400',
+    'transfers|sensitive|GET|transfer/config|2xx_or_400',
+    'virtual_accounts|sensitive|GET|pay-with-transfer/custom-accounts/status|2xx_or_400',
+    'webhooks|sensitive|GET|integration/webhooks/events|2xx_or_400',
+    'connect|sensitive|GET|connect/platforms|2xx_or_400',
+    'payouts|sensitive|GET|settlement/instant/profile|2xx_or_400',
+);
+$rk_actual = array();
+$rk_only_safe = true;
+foreach (GF_Paystack_Restricted_Key::PROBES as $p) {
+    $rk_actual[] = $p['scope'] . '|' . $p['type'] . '|' . $p['method'] . '|' . $p['path'] . '|' . $p['present'];
+    $rk_only_safe = $rk_only_safe && ($p['method'] === 'GET' || $p['scope'] === 'transactions:write');
+}
+gf_paystack_test_check($rk_actual === $rk_pinned, 'rk full probe table (scope, type, method, path, presence rule) pinned');
+gf_paystack_test_check($rk_only_safe, 'rk only the transactions:write probe is a non-GET');
+
+$v = GF_Paystack_Restricted_Key::validate($rk_key, $rk_make(array('transactions:read' => 201, 'transactions:write' => array(404, $write_msg)), array(403, $scope_msg)));
+gf_paystack_test_check($v['code'] === 'ok', 'rk baseline 201 counts as present');
+
+$v = GF_Paystack_Restricted_Key::validate($rk_key, $rk_make($rk_ok_map + array('settlements' => 204), array(403, $scope_msg)));
+gf_paystack_test_check($v['code'] === 'sensitive_scope' && $v['sensitive_scopes'] === array('settlements'), 'rk sensitive probe 204 is present');
+
+$v = GF_Paystack_Restricted_Key::validate($rk_key, $rk_make(array('transactions:read' => 400), array(403, $scope_msg), $log));
+gf_paystack_test_check($v['code'] === 'unverifiable' && $log === array('transactions:read'), 'rk 400 on the required baseline is not presence');
+
+$v = GF_Paystack_Restricted_Key::validate($rk_key, $rk_make(array('transactions:read' => 200, 'transactions:write' => 401), array(403, $scope_msg), $log));
+gf_paystack_test_check($v['code'] === 'unverifiable' && end($log) === 'transactions:write', 'rk 401 on the required write probe after a 2xx baseline is not proof');
+
+$v = GF_Paystack_Restricted_Key::validate($rk_key, $rk_make(array('transactions:read' => array(403, $scope_msg), 'transactions:write' => array(404, $write_msg), 'disputes_refunds' => 401), array(403, $scope_msg)));
+gf_paystack_test_check($v['sensitive_scopes'] === array(), 'rk 401 on sensitive after absent baseline reports no sensitive scope');
+
+// A failing transport still records the probe that ran.
+$notices = array();
+set_error_handler(function ($no, $str) use (&$notices) {
+    $notices[] = $str;
+
+    return true;
+});
+$v_throw = GF_Paystack_Restricted_Key::validate($rk_key, function () {
+    throw new RuntimeException('boom');
+});
+$v_nostatus = GF_Paystack_Restricted_Key::validate($rk_key, function () {
+    return array('body' => null);
+});
+restore_error_handler();
+gf_paystack_test_check($v_throw['probes'] === 'transactions:read:0' && $v_nostatus['probes'] === 'transactions:read:0' && $v_nostatus['code'] === 'unverifiable' && $notices === array(), 'rk throwing or status-less transport maps to status 0 without notices');
+
+// Anything thrown outside the transport is still contained.
+$GLOBALS['gf_paystack_test_filters']['gf_paystack_request_headers'] = function () {
+    throw new RuntimeException('filter exploded');
+};
+$v = GF_Paystack_Restricted_Key::validate($rk_key, $rk_make($rk_ok_map));
+gf_paystack_test_check($v['code'] === 'unverifiable' && $v['reason'] === 'transient' && $v['probes'] === '-', 'rk validate contains a Throwable raised outside the transport');
+gf_paystack_test_check(GF_Paystack_Restricted_Key::probe_plans($rk_key, $plan(400)) === 'unverifiable', 'rk probe_plans contains a Throwable raised outside the transport');
+unset($GLOBALS['gf_paystack_test_filters']['gf_paystack_request_headers']);
+
+// A filter returning a non-array must not break the probe.
+$GLOBALS['gf_paystack_test_filters']['gf_paystack_request_headers'] = 'junk';
+$seen_headers = null;
+$v = GF_Paystack_Restricted_Key::validate($rk_key, function ($m, $u, $h, $b) use (&$seen_headers, $rk_make, $rk_ok_map, $scope_msg) {
+    $seen_headers = $h;
+    $f = $rk_make($rk_ok_map, array(403, $scope_msg));
+
+    return $f($m, $u, $h, $b);
+});
+unset($GLOBALS['gf_paystack_test_filters']['gf_paystack_request_headers']);
+gf_paystack_test_check($v['code'] === 'ok' && $seen_headers === array('Authorization' => 'Bearer ' . $rk_key), 'rk non-array header filter falls back to the forced Authorization header');
+
+// probe_plans: only 400 is a pass
+gf_paystack_test_check(GF_Paystack_Restricted_Key::probe_plans($rk_key, $plan(422, 'x')) === 'unverifiable', 'rk plans 422 unverifiable');
+gf_paystack_test_check(GF_Paystack_Restricted_Key::probe_plans($rk_key, $plan(200)) === 'unverifiable', 'rk plans 200 unverifiable');
+gf_paystack_test_check(GF_Paystack_Restricted_Key::probe_plans($rk_key, $plan(401, $scope_msg)) === 'unverifiable', 'rk plans 401 unverifiable');
+gf_paystack_test_check(GF_Paystack_Restricted_Key::probe_plans($rk_key, $plan(403)) === 'unverifiable', 'rk plans 403 without a message unverifiable');
+$plan_headers = null;
+GF_Paystack_Restricted_Key::probe_plans($rk_key, function ($m, $u, $h, $b) use (&$plan_headers) {
+    $plan_headers = $h;
+
+    return array('status' => 400, 'body' => null);
+});
+gf_paystack_test_check($plan_headers['Authorization'] === 'Bearer ' . $rk_key, 'rk plans probe sends the key as Bearer');
