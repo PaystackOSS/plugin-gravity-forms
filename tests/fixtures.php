@@ -125,10 +125,16 @@ class GFPaystackGatewayFixture extends GFPaystackCallbackFixture
 class GFPaystackEventFixture extends GFPaystack
 {
     public $settings = array();
+    public $errors = array();
 
     public function get_plugin_settings()
     {
         return $this->settings;
+    }
+
+    public function log_error($message)
+    {
+        $this->errors[] = $message;
     }
 
     public function webhook_mode_value()

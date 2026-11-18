@@ -63,7 +63,7 @@ gf_paystack_test_check($event_addon->webhook_mode_value() === 'test' && $event_r
 
 $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] = hash_hmac('sha512', '', 'sk_live_a');
 $event_result = $event_addon->get_webhook_event();
-gf_paystack_test_check($event_addon->webhook_mode_value() === 'test' && $event_result === false, 'get_webhook_event case 2');
+gf_paystack_test_check($event_addon->webhook_mode_value() === 'live' && $event_result !== false && !is_wp_error($event_result), 'get_webhook_event case 2: no domain verifies under the mode whose key signed it');
 
 $event_addon->settings['api_mode'] = 'live';
 $event_result = $event_addon->get_webhook_event();

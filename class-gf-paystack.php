@@ -1713,27 +1713,61 @@ class GFPaystack extends GFPaymentAddOn
 
         $settings = $this->get_plugin_settings();
 
-        // Get api mode from data
-        $mode = self::resolve_webhook_mode(rgars($response, 'data/domain')) ?: $this->get_api_mode($settings);
+        $domain_mode = self::resolve_webhook_mode(rgars($response, 'data/domain'));
 
-        $this->paystack_api($mode, $settings);
+        if ($domain_mode) {
+            $candidates = array($domain_mode);
+        } else {
+            $candidates = array();
+            foreach (array('live', 'test') as $candidate_mode) {
+                if ($this->get_webhook_secret($candidate_mode, $settings) !== ''
+                    || GF_Paystack_Keys::type($this->get_stored_secret_key($candidate_mode, $settings)) === 'sk') {
+                    $candidates[] = $candidate_mode;
+                }
+            }
+        }
+
+        // No usable mode still runs the check once so the failure is logged like any other.
+        if (empty($candidates)) {
+            $candidates = array($this->get_api_mode($settings));
+        }
+
+        $check = null;
+        $mode = null;
+        foreach ($candidates as $candidate_mode) {
+            $this->paystack_api($candidate_mode, $settings);
+
+            // Validate Webhook Request Payload
+            try {
+                $is_verified = $this->paystack_api->validate_webhook($body);
+            } catch (\Exception $e) {
+                $this->log_error(__METHOD__ . "(): Error: " . $e->getMessage());
+
+                return new WP_Error('Webhook Validation Failed', $e->getMessage());
+            }
+
+            $check = $this->paystack_api->last_webhook_check;
+            $mode = $candidate_mode;
+
+            if ($is_verified) {
+                break;
+            }
+        }
 
         $this->webhook_mode = $mode;
 
-        // Validate Webhook Request Payload
-        try {
-            $is_verified = $this->paystack_api->validate_webhook($body);
-        } catch (\Exception $e) {
-            $this->log_error(__METHOD__ . "(): Error: " . $e->getMessage());
-
-            return new WP_Error('Webhook Validation Failed', $e->getMessage());
-        }
-
         if (!$is_verified) {
-            $this->log_error(__METHOD__ . '(): Wehhook request is invalid. Aborting.');
+            $this->log_error(sprintf(
+                '%s(): Webhook request is invalid. Aborting. sig=%s result=%s',
+                __METHOD__,
+                rgar($check, 'sig'),
+                rgar($check, 'result')
+            ));
 
             return false;
         }
+
+        $this->log_debug(sprintf('%s(): Webhook verified. sig=%s result=%s', __METHOD__, rgar($check, 'sig'), rgar($check, 'result')));
 
         $this->log_debug(__METHOD__ . "(): Processing {$this->webhook_mode} mode event.");
 
@@ -1967,12 +2001,38 @@ class GFPaystack extends GFPaymentAddOn
 
         $config = (object) array(
         'secret_key' => $this->get_secret_api_key($mode, $settings),
-        'public_key' => $this->get_public_api_key($mode, $settings)
+        'public_key' => $this->get_public_api_key($mode, $settings),
+        'webhook_secret' => $this->get_webhook_secret($mode, $settings),
+        'stored_secret_key' => $this->get_stored_secret_key($mode, $settings)
         );
 
         $this->log_debug(sprintf('%s(): Initializing Paystack API for %s mode.', __METHOD__, $mode));
 
         return $this->paystack_api = new GFPaystackApi($config);
+    }
+
+    /**
+     * Read straight from settings so the ?secret= override can't reach webhook verification.
+     *
+     * @param string     $mode
+     * @param array|null $settings
+     *
+     * @return string
+     */
+    public function get_webhook_secret($mode, $settings = null)
+    {
+        return trim((string) rgar(empty($settings) ? $this->get_plugin_settings() : $settings, "{$mode}_webhook_secret"));
+    }
+
+    /**
+     * @param string     $mode
+     * @param array|null $settings
+     *
+     * @return string
+     */
+    public function get_stored_secret_key($mode, $settings = null)
+    {
+        return trim((string) rgar(empty($settings) ? $this->get_plugin_settings() : $settings, "{$mode}_secret_key"));
     }
 
     // # OTHER HELPER FUNCTIONS ----------------------------------------------------------------------------------------------
