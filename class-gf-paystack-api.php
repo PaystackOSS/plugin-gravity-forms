@@ -3,6 +3,8 @@ if (!defined('ABSPATH')) {
     die('You are not allowed to call this page directly.');
 }
 
+require_once __DIR__ . '/includes/class-gf-paystack-keys.php';
+
 class GFPaystackApi
 {
     public $plugin_name;
