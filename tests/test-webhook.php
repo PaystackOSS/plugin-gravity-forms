@@ -44,8 +44,15 @@ gf_paystack_test_check(GFPaystack::reference_matches_entry('ref_1', array('ref_1
 
 $stored = array('paystack_mode' => 'live', 'paystack_tx_amount' => '5000', 'paystack_tx_currency' => 'NGN');
 
-$result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', $stored);
-gf_paystack_test_check(is_array($result) && $result['type'] === 'complete_payment' && $result['entry_id'] === '7', 'callback case 1');
+$charge_api = function ($overrides = array()) {
+    $api = new GFPaystackRecordingApi();
+    $api->response = array('status' => true, 'message' => 'ok', 'data' => array_merge(array('id' => 99, 'status' => 'success', 'amount' => 5000, 'currency' => 'NGN'), $overrides));
+    return $api;
+};
+
+$verified_api = $charge_api();
+$result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', $stored, null, null, $verified_api);
+gf_paystack_test_check(is_array($result) && $result['type'] === 'complete_payment' && $result['entry_id'] === '7' && $result['amount'] == 50 && $verified_api->calls === array('transaction/verify/gf-7-abc'), 'callback case 1');
 
 $result = gf_paystack_callback_run(gf_paystack_charge_event(array('metadata' => array('entry_id' => '8'))), 'live', $stored);
 gf_paystack_test_check($result === false, 'callback case 2');
@@ -53,20 +60,34 @@ gf_paystack_test_check($result === false, 'callback case 2');
 $result = gf_paystack_callback_run(gf_paystack_charge_event(), 'test', $stored);
 gf_paystack_test_check($result === false, 'callback case 3');
 
-$result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', array('paystack_tx_amount' => '5000'));
+$result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', array('paystack_tx_amount' => '5000'), null, null, $charge_api());
 gf_paystack_test_check(is_array($result) && $result['type'] === 'complete_payment', 'callback case 4');
 
 $result = gf_paystack_callback_run(gf_paystack_charge_event(), 'test', array('paystack_tx_amount' => '5000'));
 gf_paystack_test_check($result === false, 'callback case 5');
 
-$result = gf_paystack_callback_run(gf_paystack_charge_event(array('amount' => 100)), 'live', $stored);
+$result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', $stored, null, null, $charge_api(array('amount' => 100)));
 gf_paystack_test_check($result === false, 'callback case 6');
 
-$result = gf_paystack_callback_run(gf_paystack_charge_event(array('currency' => 'USD')), 'live', $stored);
+$result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', $stored, null, null, $charge_api(array('currency' => 'USD')));
 gf_paystack_test_check($result === false, 'callback case 7');
 
-$result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', array());
+$result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', array(), null, null, $charge_api());
 gf_paystack_test_check(is_array($result) && $result['type'] === 'complete_payment', 'callback case 8');
+
+$result = gf_paystack_callback_run(gf_paystack_charge_event(array('amount' => 100, 'currency' => 'USD')), 'live', $stored, null, null, $charge_api());
+gf_paystack_test_check(is_array($result) && $result['type'] === 'complete_payment' && $result['amount'] == 50, 'callback case 29');
+
+$result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', $stored, null, null, $charge_api(array('status' => 'failed')));
+gf_paystack_test_check($result === false, 'callback case 30');
+
+$result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', $stored, null, null, $charge_api(array('id' => 100)));
+gf_paystack_test_check($result === false, 'callback case 31');
+
+$throwing_charge_api = $charge_api();
+$throwing_charge_api->throw = true;
+$result = gf_paystack_callback_run(gf_paystack_charge_event(), 'live', $stored, null, null, $throwing_charge_api);
+gf_paystack_test_check($result === false, 'callback case 32');
 
 $result = gf_paystack_callback_run(gf_paystack_charge_event(array('reference' => 'gf-7-unknown')), 'live', $stored);
 gf_paystack_test_check(is_wp_error($result) && $result->code === 'entry_not_found', 'callback case 9');

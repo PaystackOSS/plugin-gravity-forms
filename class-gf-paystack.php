@@ -1304,7 +1304,31 @@ class GFPaystack extends GFPaymentAddOn
             if ($feed['meta']['transactionType'] == 'subscription') {
                 gform_update_meta($entry_id, 'paystack_tx_auth_code', rgars($event, 'data/authorization/authorization_code'));
             } else {
-                if (!self::charge_matches_stored(rgars($event, 'data/amount'), rgars($event, 'data/currency'), gform_get_meta($entry_id, 'paystack_tx_amount'), gform_get_meta($entry_id, 'paystack_tx_currency'))) {
+                try {
+                    $response = $this->paystack_api->verify_transaction($reference);
+                } catch (\Exception $e) {
+                    $this->log_error(__METHOD__ . '(): Transaction could not be verified. Reason: ' . $e->getMessage());
+
+                    return false;
+                }
+
+                $charge = rgar($response, 'data');
+
+                if (!is_array($charge) || rgar($charge, 'status') !== 'success') {
+                    $this->log_error(__METHOD__ . '(): Transaction verification failed. Aborting.');
+
+                    return false;
+                }
+
+                $verified_id = rgar($charge, 'id');
+
+                if ($verified_id && (string) $verified_id !== (string) rgars($event, 'data/id')) {
+                    $this->log_error(__METHOD__ . '(): Verified transaction does not match the webhook event. Aborting.');
+
+                    return false;
+                }
+
+                if (!self::charge_matches_stored(rgar($charge, 'amount'), rgar($charge, 'currency'), gform_get_meta($entry_id, 'paystack_tx_amount'), gform_get_meta($entry_id, 'paystack_tx_currency'))) {
                     $this->log_error(__METHOD__ . '(): Webhook could not be matched to entry. Aborting.');
 
                     return false;
@@ -1313,7 +1337,7 @@ class GFPaystack extends GFPaymentAddOn
                 $action['id']               = rgars($event, 'data/id') . '_' . $type;
                 $action['entry_id']         = $entry_id;
                 $action['transaction_id']   = rgars($event, 'data/id');
-                $action['amount']           = $this->get_amount_import(rgars($event, 'data/amount'), rgars($event, 'data/currency'));
+                $action['amount']           = $this->get_amount_import(rgar($charge, 'amount'), rgar($charge, 'currency'));
                 $action['type']             = 'complete_payment';
                 $action['ready_to_fulfill'] = !$entry['is_fulfilled'] ? true : false;
                 $action['payment_date']     = rgars($event, 'data/paidAt');
