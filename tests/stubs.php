@@ -15,7 +15,8 @@ if (!function_exists('add_filter')) {
 if (!function_exists('apply_filters')) {
     function apply_filters($tag, $value)
     {
-        return $value;
+        $overrides = isset($GLOBALS['gf_paystack_test_filters']) ? $GLOBALS['gf_paystack_test_filters'] : array();
+        return array_key_exists($tag, $overrides) ? $overrides[$tag] : $value;
     }
 }
 
@@ -30,6 +31,13 @@ if (!function_exists('esc_html__')) {
     function esc_html__($text, $domain = '')
     {
         return $text;
+    }
+}
+
+if (!function_exists('esc_html_e')) {
+    function esc_html_e($text, $domain = '')
+    {
+        echo $text;
     }
 }
 
@@ -163,6 +171,11 @@ if (!class_exists('GFPaymentAddOn')) {
         public function log_error($message)
         {
             $GLOBALS['gf_paystack_test_gf_logs'][] = array('error', $message);
+        }
+
+        public function update_plugin_settings($settings)
+        {
+            $GLOBALS['gf_paystack_test_saved_settings'] = $settings;
         }
 
         public function get_plugin_settings()

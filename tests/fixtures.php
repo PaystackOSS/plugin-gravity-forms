@@ -183,3 +183,61 @@ function gf_paystack_exception_message($callback)
 
     return '';
 }
+
+class GFPaystackSettingsFixture extends GFPaystack
+{
+    public $posted = array();
+    public $stored = array();
+    public $field_errors = array();
+    public $verdict = array('code' => 'ok', 'scopes' => array(), 'sensitive_scopes' => array(), 'reason' => null, 'probes' => 'transactions:read:200');
+    public $plans_result = 'ok';
+    public $validate_calls = array();
+    public $plans_calls = array();
+
+    public function get_posted_settings()
+    {
+        return $this->posted;
+    }
+
+    public function get_plugin_setting($name)
+    {
+        return rgar($this->stored, $name);
+    }
+
+    public function get_plugin_settings()
+    {
+        return $this->stored;
+    }
+
+    public function set_field_error($field, $message = '')
+    {
+        $this->field_errors[$field['name']] = $message;
+    }
+
+    public function is_detail_page()
+    {
+        return false;
+    }
+
+    public function get_current_feed_id()
+    {
+        return 0;
+    }
+
+    public function get_webhook_url($feed_id = null)
+    {
+        return 'https://example.test/?callback=gravityformspaystack';
+    }
+
+    protected function validate_restricted_key($key)
+    {
+        $this->validate_calls[] = $key;
+        return $this->verdict;
+    }
+
+    protected function probe_restricted_key_plans($key)
+    {
+        $this->plans_calls[] = $key;
+        return $this->plans_result;
+    }
+}

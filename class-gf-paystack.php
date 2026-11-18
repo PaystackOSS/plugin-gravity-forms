@@ -3,6 +3,7 @@
 defined('ABSPATH') || die();
 
 require_once __DIR__ . '/includes/class-gf-paystack-keys.php';
+require_once __DIR__ . '/includes/class-gf-paystack-restricted-key.php';
 
 // Include the payment add-on framework.
 GFForms::include_payment_addon_framework();
@@ -324,6 +325,9 @@ class GFPaystack extends GFPaymentAddOn
         )
         );
 
+        $key_help = '<h6>' . esc_html__('Secret or Restricted Key', 'gravityformspaystack') . '</h6>' . esc_html__('A restricted key lets this plugin take payments and nothing else. Create one in your Paystack Dashboard with Transactions: read and write, plus Plans: write if you sell subscriptions.', 'gravityformspaystack');
+        $whsec_help = '<h6>' . esc_html__('Webhook Signing Secret', 'gravityformspaystack') . '</h6>' . esc_html__('Copy it from Settings → API Keys & Webhooks in your Paystack Dashboard. Required with a restricted key.', 'gravityformspaystack');
+
         $credentials_fields = array(
         array(
         'name'  => 'test_public_key',
@@ -333,9 +337,20 @@ class GFPaystack extends GFPaymentAddOn
         ),
         array(
         'name'  => 'test_secret_key',
-        'label' => esc_html__('Test Secret Key', 'gravityformspaystack'),
+        'label' => esc_html__('Test Secret or Restricted Key', 'gravityformspaystack'),
         'type'  => 'text',
+        'input_type' => 'password',
         'class'    => 'medium',
+        'tooltip'  => $key_help,
+        'validation_callback' => array($this, 'validate_test_secret_key'),
+        ),
+        array(
+        'name'  => 'test_webhook_secret',
+        'label' => esc_html__('Test Webhook Signing Secret', 'gravityformspaystack'),
+        'type'  => 'text',
+        'input_type' => 'password',
+        'class'    => 'medium',
+        'tooltip'  => $whsec_help,
         ),
         array(
         'name'  => 'live_public_key',
@@ -345,9 +360,20 @@ class GFPaystack extends GFPaymentAddOn
         ),
         array(
         'name'  => 'live_secret_key',
-        'label' => esc_html__('Live Secret Key', 'gravityformspaystack'),
+        'label' => esc_html__('Live Secret or Restricted Key', 'gravityformspaystack'),
         'type'  => 'text',
+        'input_type' => 'password',
         'class'    => 'medium',
+        'tooltip'  => $key_help,
+        'validation_callback' => array($this, 'validate_live_secret_key'),
+        ),
+        array(
+        'name'  => 'live_webhook_secret',
+        'label' => esc_html__('Live Webhook Signing Secret', 'gravityformspaystack'),
+        'type'  => 'text',
+        'input_type' => 'password',
+        'class'    => 'medium',
+        'tooltip'  => $whsec_help,
         ),
         );
 
@@ -411,6 +437,7 @@ class GFPaystack extends GFPaymentAddOn
                     </p>
                 </li>
                 <li><?php esc_html_e('Save Changes.', 'gravityformspaystack'); ?></li>
+                <li><?php esc_html_e('If you set a webhook signing secret (whsec_) from Settings → API Keys & Webhooks, webhooks are verified with it instead of your secret key.', 'gravityformspaystack'); ?></li>
             </ol>
         </div>
 
@@ -455,6 +482,12 @@ class GFPaystack extends GFPaymentAddOn
         );
 
         $default_settings = parent::add_field_after('feedName', $fields, $default_settings);
+
+        $transaction_type = $this->get_field('transactionType', $default_settings);
+        if (is_array($transaction_type)) {
+            $transaction_type['validation_callback'] = array($this, 'validate_subscription_plans');
+            $default_settings = $this->replace_field('transactionType', $transaction_type, $default_settings);
+        }
 
         // Add donation to transaction type drop down 
         // $transaction_type = parent::get_field('transactionType', $default_settings);
@@ -2045,6 +2078,226 @@ class GFPaystack extends GFPaymentAddOn
     public function get_stored_secret_key($mode, $settings = null)
     {
         return trim((string) rgar(empty($settings) ? $this->get_plugin_settings() : $settings, "{$mode}_secret_key"));
+    }
+
+    // # KEY VALIDATION ------------------------------------------------------------------------------------------------
+
+    /**
+     * Validation compares trimmed values, so store them trimmed too: a pasted key with a trailing space would
+     * otherwise pass validation but break the Authorization header.
+     *
+     * @param array $settings
+     */
+    public function update_plugin_settings($settings)
+    {
+        if (is_array($settings)) {
+            foreach (array('test_secret_key', 'live_secret_key', 'test_webhook_secret', 'live_webhook_secret') as $name) {
+                if (isset($settings[$name]) && is_string($settings[$name])) {
+                    $settings[$name] = trim($settings[$name]);
+                }
+            }
+        }
+
+        parent::update_plugin_settings($settings);
+    }
+
+    public function validate_test_secret_key($field)
+    {
+        $this->validate_secret_key_for_mode('test');
+    }
+
+    public function validate_live_secret_key($field)
+    {
+        $this->validate_secret_key_for_mode('live');
+    }
+
+    /**
+     * @param string $mode 'test' or 'live'.
+     *
+     * @return void
+     */
+    protected function validate_secret_key_for_mode($mode)
+    {
+        $other    = $mode === 'test' ? 'live' : 'test';
+        $settings = $this->get_posted_settings();
+        $key      = trim((string) rgar($settings, "{$mode}_secret_key"));
+
+        $result = GF_Paystack_Keys::resolve_save(
+            $mode,
+            $key,
+            $this->get_plugin_setting("{$mode}_secret_key"),
+            rgar($settings, "{$mode}_webhook_secret"),
+            rgar($settings, "{$other}_webhook_secret"),
+            GF_Paystack_Keys::restricted_keys_enabled()
+        );
+
+        if ($result['error'] !== null) {
+            $field_name = strpos($result['error'], 'whsec_') === 0 ? "{$mode}_webhook_secret" : "{$mode}_secret_key";
+            $this->set_field_error(array('name' => $field_name), $this->key_error_message($result['error'], $mode, $other) . $this->not_saved_suffix());
+            return;
+        }
+
+        if (!$result['probe']) {
+            return;
+        }
+
+        $verdict = $this->validate_restricted_key($key);
+        $this->log_debug("rk validate mode={$mode} code={$verdict['code']} probes={$verdict['probes']}");
+
+        if ($verdict['code'] !== 'ok') {
+            $this->set_field_error(array('name' => "{$mode}_secret_key"), $this->probe_error_message($verdict) . $this->not_saved_suffix());
+        }
+    }
+
+    /**
+     * @param string $key
+     *
+     * @return array
+     */
+    protected function validate_restricted_key($key)
+    {
+        return GF_Paystack_Restricted_Key::validate($key);
+    }
+
+    /**
+     * @param string $key
+     *
+     * @return string
+     */
+    protected function probe_restricted_key_plans($key)
+    {
+        return GF_Paystack_Restricted_Key::probe_plans($key);
+    }
+
+    /**
+     * Subscription feeds need Plans: write, which the settings probe doesn't check.
+     *
+     * @param array $field The field properties. Not used.
+     *
+     * @return void
+     */
+    public function validate_subscription_plans($field)
+    {
+        $settings = $this->get_posted_settings();
+        if (rgar($settings, 'transactionType') !== 'subscription') {
+            return;
+        }
+
+        $mode = rgar($settings, 'mode') === 'test' ? 'test' : 'live';
+        $key  = $this->get_stored_secret_key($mode);
+        if (GF_Paystack_Keys::type($key) !== 'rk') {
+            return;
+        }
+
+        $result = $this->probe_restricted_key_plans($key);
+        if ($result === 'ok') {
+            return;
+        }
+
+        if ($result === 'plans_missing') {
+            $message = sprintf(esc_html__('Subscriptions need Plans: write on your %s restricted key. Add it in your Paystack Dashboard, then save this feed again.', 'gravityformspaystack'), $mode);
+        } elseif ($result === 'plans_mor') {
+            $message = esc_html__('Paystack subscriptions aren\'t available for merchant-of-record accounts.', 'gravityformspaystack');
+        } else {
+            $message = esc_html__('We couldn\'t reach Paystack to check this key. Please try again.', 'gravityformspaystack');
+        }
+
+        $this->set_field_error(array('name' => 'transactionType'), $message);
+    }
+
+    /**
+     * @return string
+     */
+    protected function not_saved_suffix()
+    {
+        return ' ' . esc_html__('No settings were saved.', 'gravityformspaystack');
+    }
+
+    /**
+     * @param string $code  A GF_Paystack_Keys::resolve_save() error code.
+     * @param string $mode
+     * @param string $other
+     *
+     * @return string
+     */
+    protected function key_error_message($code, $mode, $other)
+    {
+        switch ($code) {
+            case 'wrong_field':
+                return sprintf(esc_html__('This is a %1$s key. Paste it in the %1$s secret key field.', 'gravityformspaystack'), $other);
+            case 'invalid_format':
+                return sprintf(esc_html__('Secret keys start with sk_%1$s_ and restricted keys with rk_%1$s_. Check you copied the whole key.', 'gravityformspaystack'), $mode);
+            case 'rk_disabled':
+                return esc_html__('Restricted keys are turned off on this site. Use your secret key instead.', 'gravityformspaystack');
+            case 'whsec_required':
+                return sprintf(esc_html__('A restricted key can\'t verify Paystack webhooks. Add your %s webhook signing secret from Settings → API Keys & Webhooks in your Paystack Dashboard.', 'gravityformspaystack'), $mode);
+            case 'whsec_format':
+                return esc_html__('Webhook signing secrets start with whsec_. Copy it from Settings → API Keys & Webhooks in your Paystack Dashboard.', 'gravityformspaystack');
+            case 'whsec_same':
+                return esc_html__('Your test and live webhook signing secrets are the same. Each mode has its own secret.', 'gravityformspaystack');
+        }
+
+        return esc_html__('Paystack didn\'t accept this key.', 'gravityformspaystack');
+    }
+
+    /**
+     * @param array $verdict A GF_Paystack_Restricted_Key::validate() result.
+     *
+     * @return string
+     */
+    protected function probe_error_message($verdict)
+    {
+        switch ($verdict['code']) {
+            case 'invalid_key':
+                return esc_html__('Paystack didn\'t accept this key. It may be invalid, revoked, or restricted keys may not be enabled on your Paystack account yet.', 'gravityformspaystack');
+            case 'missing_scope':
+            case 'sensitive_scope':
+                $parts = array();
+                if (!empty($verdict['scopes'])) {
+                    $parts[] = sprintf(esc_html__('enable %s', 'gravityformspaystack'), $this->scope_labels($verdict['scopes']));
+                }
+                if (!empty($verdict['sensitive_scopes'])) {
+                    $parts[] = sprintf(esc_html__('remove %s', 'gravityformspaystack'), $this->scope_labels($verdict['sensitive_scopes']));
+                }
+                return sprintf(esc_html__('This restricted key can\'t be used: %s. It needs Transactions: read and write. Permissions that can move money aren\'t allowed.', 'gravityformspaystack'), implode('; ', $parts));
+        }
+
+        if ($verdict['reason'] === 'blocked') {
+            return esc_html__('Paystack refused our check of this key. Try again, or contact Paystack Support if it keeps happening.', 'gravityformspaystack');
+        }
+
+        return esc_html__('We couldn\'t reach Paystack to check this key. Please try again.', 'gravityformspaystack');
+    }
+
+    /**
+     * @param array $scopes Scope ids.
+     *
+     * @return string
+     */
+    protected function scope_labels($scopes)
+    {
+        $labels = array(
+            'transactions:read'  => 'Transactions: read',
+            'transactions:write' => 'Transactions: write',
+            'disputes_refunds'   => 'Disputes and refunds',
+            'bulk_charges'       => 'Bulk charges',
+            'direct_debit'       => 'Direct debit',
+            'preauthorizations'  => 'Preauthorizations',
+            'settlements'        => 'Settlements',
+            'subaccounts'        => 'Subaccounts',
+            'transfers'          => 'Transfers',
+            'virtual_accounts'   => 'Virtual accounts',
+            'webhooks'           => 'Webhooks',
+            'connect'            => 'Connect',
+            'payouts'            => 'Payouts',
+        );
+
+        $out = array();
+        foreach ($scopes as $scope) {
+            $out[] = isset($labels[$scope]) ? $labels[$scope] : $scope;
+        }
+
+        return implode(', ', $out);
     }
 
     // # OTHER HELPER FUNCTIONS ----------------------------------------------------------------------------------------------
