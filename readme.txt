@@ -27,7 +27,7 @@ The Test and Live settings have a "Webhook signing secret" field. Copy the `whse
 * It is required with a restricted key.
 * Once it is set, webhooks are only accepted with a valid Paystack-Signature header that was signed within the last 5 minutes.
 * Successful-payment webhooks are confirmed with Paystack before an entry is marked as paid.
-* The webhook URL must listen to charge.success. Forms that sell subscriptions also need subscription.create, subscription.disable, invoice.create, invoice.update and invoice.payment_failed.
+* The webhook URL must listen to charge.success. Forms that sell subscriptions also need subscription.create, subscription.disable, invoice.create, invoice.update and invoice.payment_failed. Selecting all events is fine: the others are ignored.
 
 
 == Installation ==
