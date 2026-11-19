@@ -439,6 +439,7 @@ class GFPaystack extends GFPaymentAddOn
                         <code><?php echo $this->get_webhook_url($this->get_current_feed_id()); ?></code>
                     </p>
                 </li>
+                <li><?php esc_html_e('Select the events it listens to: charge.success for payments. If you sell subscriptions, also subscription.create, subscription.disable, invoice.create, invoice.update and invoice.payment_failed.', 'gravityformspaystack'); ?></li>
                 <li><?php esc_html_e('Save Changes.', 'gravityformspaystack'); ?></li>
                 <li><?php esc_html_e('Copy the webhook signing secret (whsec_) from the same page into the Webhook Signing Secret field. It is required with a restricted key.', 'gravityformspaystack'); ?></li>
             </ol>
