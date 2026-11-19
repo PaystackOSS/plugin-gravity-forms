@@ -16,21 +16,54 @@ $st_run = function ($mode, $posted, $stored = array(), $configure = null, $which
     if ($configure) {
         $configure($addon);
     }
+    $call = function ($method) use ($addon, $mode) {
+        return (function () use ($method, $mode) {
+            return $this->$method($mode);
+        })->call($addon);
+    };
     if ($which !== 'whsec') {
-        $addon->{"validate_{$mode}_secret_key"}(array());
+        $call('validate_secret_key_for_mode');
     }
     if ($which !== 'key') {
-        $addon->{"validate_{$mode}_webhook_secret"}(array());
+        $call('validate_webhook_secret_for_mode');
     }
 
     return $addon;
 };
 
+// The Mode field's callback checks both modes, so a key hidden by the mode switch can't skip validation.
+$cred = function ($posted, $stored = array(), $configure = null) {
+    $GLOBALS['gf_paystack_test_gf_logs'] = array();
+    $addon = new GFPaystackSettingsFixture();
+    $addon->posted = $posted;
+    $addon->stored = $stored;
+    if ($configure) {
+        $configure($addon);
+    }
+    $addon->validate_credentials(array());
+
+    return $addon;
+};
+$a = $cred(array('api_mode' => 'live', 'test_secret_key' => $st_sk_test));
+gf_paystack_test_check(isset($a->field_errors['test_secret_key']) && strpos($a->field_errors['api_mode'] ?? '', 'Your test settings have a problem. Select Test to see it.') === 0, 'credentials: new sk in the hidden test fields is refused and flagged on Mode');
+$a = $cred(array('api_mode' => 'live', 'test_secret_key' => $st_rk_test, 'test_webhook_secret' => ''));
+gf_paystack_test_check(isset($a->field_errors['test_webhook_secret']) && isset($a->field_errors['api_mode']), 'credentials: hidden rk without whsec is refused');
+$a = $cred(array('api_mode' => 'test', 'live_secret_key' => $st_rk_live, 'live_webhook_secret' => 'nope'));
+gf_paystack_test_check(isset($a->field_errors['live_webhook_secret']) && strpos($a->field_errors['api_mode'] ?? '', 'Your live settings') === 0, 'credentials: hidden bad whsec is refused');
+$a = $cred(array('api_mode' => 'test', 'live_secret_key' => $st_rk_live, 'live_webhook_secret' => $st_ws_live));
+gf_paystack_test_check($a->validate_calls === array($st_rk_live), 'credentials: hidden new rk is still probed');
+$a = $cred(array('api_mode' => 'test', 'test_secret_key' => $st_sk_test));
+gf_paystack_test_check(isset($a->field_errors['test_secret_key']) && !isset($a->field_errors['api_mode']), 'credentials: an error in the selected mode is not repeated on Mode');
+$a = $cred(array('api_mode' => 'test', 'test_secret_key' => $st_sk_test, 'live_secret_key' => $st_sk_live), array('test_secret_key' => $st_sk_test, 'live_secret_key' => $st_sk_live));
+gf_paystack_test_check($a->field_errors === array() && $a->validate_calls === array(), 'credentials: grandfathered sk keys in both modes save');
+$a = $cred(array('api_mode' => ''));
+gf_paystack_test_check(($a->field_errors['api_mode'] ?? '') === 'Choose Test or Live.', 'credentials: a missing mode is refused');
+
 $a = $st_run('test', array('test_secret_key' => $st_sk_test), array('test_secret_key' => $st_sk_test));
 gf_paystack_test_check($a->field_errors === array() && $a->validate_calls === array(), 'settings unchanged sk saves');
 
 $a = $st_run('live', array('live_secret_key' => $st_sk_live), array());
-gf_paystack_test_check($a->field_errors === array() && $a->validate_calls === array(), 'settings new sk saves without probe');
+gf_paystack_test_check(strpos($a->field_errors['live_secret_key'] ?? '', 'Use a live restricted key instead.') === 0 && $a->validate_calls === array(), 'settings new sk refused without probe');
 
 $a = $st_run('test', array('test_secret_key' => '  ' . $st_rk_test . ' ', 'test_webhook_secret' => $st_ws_test));
 gf_paystack_test_check($a->field_errors === array() && $a->validate_calls === array($st_rk_test), 'settings new rk with whsec probes trimmed key and saves');
@@ -71,14 +104,17 @@ gf_paystack_test_check(isset($a->field_errors['test_webhook_secret']), 'settings
 $a = $st_run('test', array('test_secret_key' => $st_rk_test, 'test_webhook_secret' => 'nope'), array('test_secret_key' => $st_rk_test));
 gf_paystack_test_check(strpos($a->field_errors['test_webhook_secret'], 'Webhook signing secrets start with whsec_.') === 0, 'settings bad whsec shape errors');
 
-$a = $st_run('live', array('live_secret_key' => $st_sk_live, 'live_webhook_secret' => $st_ws_live, 'test_webhook_secret' => $st_ws_live));
+$a = $st_run('live', array('live_secret_key' => $st_sk_live, 'live_webhook_secret' => $st_ws_live, 'test_webhook_secret' => $st_ws_live), array('live_secret_key' => $st_sk_live));
 gf_paystack_test_check(isset($a->field_errors['live_webhook_secret']) && strpos($a->field_errors['live_webhook_secret'], 'are the same') !== false, 'settings test==live whsec errors');
 
-$a = $st_run('live', array('live_secret_key' => $st_sk_test));
-gf_paystack_test_check($a->field_errors['live_secret_key'] === 'This is a test key. Paste it in the test secret key field.' . $st_suffix, 'settings wrong_field copy');
+$a = $st_run('live', array('live_secret_key' => $st_rk_test, 'live_webhook_secret' => $st_ws_live));
+gf_paystack_test_check($a->field_errors['live_secret_key'] === 'This is a test key. Paste it in the test restricted key field.' . $st_suffix, 'settings wrong_field copy');
+
+$a = $st_run('live', array('live_secret_key' => 'sk_live_rotated123'), array('live_secret_key' => $st_sk_live));
+gf_paystack_test_check($a->field_errors['live_secret_key'] === 'Use a live restricted key instead. Create one in your Paystack Dashboard with Transactions: read and write.' . $st_suffix, 'settings changed sk refused copy');
 
 $a = $st_run('test', array('test_secret_key' => 'garbage'));
-gf_paystack_test_check($a->field_errors['test_secret_key'] === 'Secret keys start with sk_test_ and restricted keys with rk_test_. Check you copied the whole key.' . $st_suffix, 'settings invalid_format copy');
+gf_paystack_test_check($a->field_errors['test_secret_key'] === 'Restricted keys start with rk_test_. Check you copied the whole key.' . $st_suffix, 'settings invalid_format copy');
 
 // Each callback reports only its own codes.
 $a = $st_run('test', array('test_secret_key' => $st_rk_test, 'test_webhook_secret' => ''), array(), null, 'key');
@@ -91,7 +127,7 @@ $a = $st_run('live', array('live_secret_key' => $st_sk_test));
 gf_paystack_test_check($a->error_log === array('live_secret_key'), 'settings key code is reported once across both callbacks');
 $a = $st_run('live', $rk_posted, array(), $verdict(array('code' => 'invalid_key')));
 gf_paystack_test_check($a->error_log === array('live_secret_key'), 'settings probe result is reported once across both callbacks');
-$a = $st_run('live', array('live_secret_key' => $st_sk_live, 'live_webhook_secret' => 'nope'), array(), null, 'key');
+$a = $st_run('live', array('live_secret_key' => $st_sk_live, 'live_webhook_secret' => 'nope'), array('live_secret_key' => $st_sk_live), null, 'key');
 gf_paystack_test_check($a->error_log === array(), 'settings key callback silent on bad whsec shape');
 
 // Plans check on save.
@@ -139,13 +175,8 @@ gf_paystack_test_check($a2->plans_calls === array() && strpos($a2->field_errors[
 $a = $st_run('live', array('live_secret_key' => $st_rk_live, 'live_webhook_secret' => $st_ws_live), array('live_secret_key' => $st_rk_live), $with_feeds(array($sub_feed('live')), 'plans_missing'), 'key');
 gf_paystack_test_check($a->plans_calls === array() && $a->field_errors === array(), 'settings save skips plans for an unchanged key');
 
-$GLOBALS['gf_paystack_test_filters'] = array('gform_paystack_restricted_keys_enabled' => false);
-$a = $st_run('live', $rk_posted);
-gf_paystack_test_check(isset($a->field_errors['live_secret_key']) && strpos($a->field_errors['live_secret_key'], 'Restricted keys are turned off on this site.') === 0 && $a->validate_calls === array(), 'settings gate off new rk rejected');
-
-$a = $st_run('live', $rk_posted, array('live_secret_key' => $st_rk_live));
-gf_paystack_test_check($a->field_errors === array() && $a->validate_calls === array(), 'settings gate off kept rk ok');
-unset($GLOBALS['gf_paystack_test_filters']);
+$a = $st_run('live', array('live_secret_key' => $st_rk_live, 'live_webhook_secret' => $st_ws_live), array('live_secret_key' => $st_sk_live));
+gf_paystack_test_check($a->field_errors === array() && $a->validate_calls === array($st_rk_live), 'settings stored sk replaced by rk is probed');
 
 // Fields.
 $fa = new GFPaystackSettingsFixture();
@@ -160,7 +191,21 @@ foreach (array('test_secret_key', 'live_secret_key', 'test_webhook_secret', 'liv
 gf_paystack_test_check($pw_ok, 'settings secret and whsec fields are password inputs');
 $order = array_keys($by_name);
 gf_paystack_test_check(array_search('test_webhook_secret', $order) === array_search('test_secret_key', $order) + 1 && array_search('live_webhook_secret', $order) === array_search('live_secret_key', $order) + 1, 'settings whsec fields follow their secret key');
-gf_paystack_test_check($by_name['test_secret_key']['label'] === 'Test Secret or Restricted Key' && $by_name['live_webhook_secret']['label'] === 'Live Webhook Signing Secret' && strpos($by_name['live_secret_key']['tooltip'], 'A restricted key limits what this plugin can do with your Paystack account.') !== false, 'settings labels and help text');
+gf_paystack_test_check($by_name['test_secret_key']['label'] === 'Test Restricted Key' && $by_name['live_webhook_secret']['label'] === 'Live Webhook Signing Secret' && strpos($by_name['live_secret_key']['tooltip'], 'Create a restricted key in your Paystack Dashboard') !== false, 'settings labels and help text');
+gf_paystack_test_check(!isset($by_name['test_public_key']) && !isset($by_name['live_public_key']), 'settings have no public key fields');
+$labels = '';
+foreach ($by_name as $f) {
+    $labels .= ' ' . rgar($f, 'label') . ' ' . rgar($f, 'tooltip');
+}
+gf_paystack_test_check(stripos($labels, 'secret key') === false, 'settings never mention secret keys');
+$dep_ok = true;
+foreach (array('test' => array('test_secret_key', 'test_webhook_secret'), 'live' => array('live_secret_key', 'live_webhook_secret')) as $dep_mode => $names) {
+    foreach ($names as $n) {
+        $dep_ok = $dep_ok && rgar($by_name[$n], 'dependency') === array('live' => true, 'fields' => array(array('field' => 'api_mode', 'values' => array($dep_mode))));
+    }
+}
+gf_paystack_test_check($dep_ok, 'settings key fields show only for their own mode');
+gf_paystack_test_check($by_name['api_mode']['default_value'] === 'test' && !isset($by_name['webhooks_enabled']['dependency']['live']), 'settings mode defaults to test and webhook checkbox shows in both modes');
 
 // Feed.
 $feed = function ($posted, $stored, $plans = 'ok') {
@@ -293,12 +338,12 @@ gf_paystack_test_check($st_saved['test_secret_key'] === $st_rk_test && $st_saved
 
 // # Coverage additions (dedicated test pass)
 
-// Each credential field is wired to its own callback.
-$wiring_ok = true;
-foreach (array('test_secret_key' => 'validate_test_secret_key', 'live_secret_key' => 'validate_live_secret_key', 'test_webhook_secret' => 'validate_test_webhook_secret', 'live_webhook_secret' => 'validate_live_webhook_secret') as $field_name => $callback) {
-    $wiring_ok = $wiring_ok && isset($by_name[$field_name]['validation_callback']) && $by_name[$field_name]['validation_callback'] === array($fa, $callback);
+// Credentials are validated from the always-visible Mode field, never from fields a dependency can hide.
+$wiring_ok = $by_name['api_mode']['validation_callback'] === array($fa, 'validate_credentials');
+foreach (array('test_secret_key', 'live_secret_key', 'test_webhook_secret', 'live_webhook_secret') as $field_name) {
+    $wiring_ok = $wiring_ok && !isset($by_name[$field_name]['validation_callback']);
 }
-gf_paystack_test_check($wiring_ok, 'settings each key and whsec field carries its own validation callback');
+gf_paystack_test_check($wiring_ok, 'settings credentials are validated from the Mode field');
 
 // Each callback validates its own mode.
 $a = $st_run('test', array('test_secret_key' => $st_sk_live, 'live_secret_key' => $st_sk_test));

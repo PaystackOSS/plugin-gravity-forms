@@ -13,30 +13,26 @@ License URI: http://www.gnu.org/licenses/gpl-2.0.html
 The Paystack Addon for Gravity Forms allows you to quickly and easily implement credit card payments with WordPress. With the Paystack Add-On you can capture one time credit card payments or setup recurring payment subscriptions.
 
 = Restricted keys =
-You can use a Paystack restricted key instead of your full secret key. Paste an `rk_test_...` or `rk_live_...` key into the matching Test or Live Secret key field.
+The add-on connects to Paystack with a restricted key. Choose Test or Live under Mode, then paste an `rk_test_...` or `rk_live_...` key into that mode's Restricted Key field. Only the selected mode's fields are shown.
 
 * The key needs Transactions: read and write permissions, plus Plans: write if you sell subscriptions.
 * Keys with permissions that can move money (transfers, refunds, settlements, payouts and similar) are rejected.
 * The key is checked with Paystack when you save it, and only then. If you change its permissions later in the Paystack Dashboard, it is not checked again.
 * A restricted key needs the Webhook signing secret for the same mode (see below).
+* Sites set up before version 2.0.10 keep working with the key they already saved. When you replace it, the new key must be a restricted key.
 
 = Webhook signing secret =
 The Test and Live settings have a "Webhook signing secret" field. Copy the `whsec_...` value from Settings > API Keys & Webhooks in your Paystack Dashboard.
 
-* It is required when you use a restricted key, and optional when you use a secret key.
+* It is required with a restricted key.
 * Once it is set, webhooks are only accepted with a valid Paystack-Signature header that was signed within the last 5 minutes.
 * Successful-payment webhooks are confirmed with Paystack before an entry is marked as paid.
-
-= For developers =
-Restricted keys can be turned off with the `gform_paystack_restricted_keys_enabled` filter (default `true`). Restricted keys that were already saved keep working.
-
-`add_filter( 'gform_paystack_restricted_keys_enabled', '__return_false' );`
 
 
 == Installation ==
  
 = Minimum Requirements =
-* Gravity Forms v2.4+
+* Gravity Forms v2.5+
 * WordPress v5.1+
 * SSL Certificate Installed and - Configured
 * Download and install the add-on
@@ -75,7 +71,10 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 == Changelog ==
 
 = 2.0.10 - November 19, 2026 =
-* Added support for Paystack restricted keys (`rk_test_...` / `rk_live_...`).
+* The add-on now uses Paystack restricted keys (`rk_test_...` / `rk_live_...`). A key saved by an earlier version keeps working until you replace it; a new key must be a restricted key.
+* Removed the public key fields. Payments never used them.
+* The settings page shows only the selected mode's fields.
+* Requires Gravity Forms 2.5 or later.
 * Added Test and Live webhook signing secret fields, and webhook signature verification when one is set.
 * Successful-payment (charge.success) webhooks are now confirmed with Paystack before an entry is marked as paid.
 * Keys and signing secrets are hidden in logs.
@@ -124,7 +123,7 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 == Upgrade Notice ==
 
 = 2.0.10 =
-* Adds optional Paystack restricted keys and webhook signing secrets. Existing secret keys keep working with no changes needed. The ?secret= / ?public= URL override has been removed.
+* Adds Paystack restricted keys and webhook signing secrets. Your saved key keeps working with no changes needed; a new key must be a restricted key. Requires Gravity Forms 2.5 or later. The ?secret= / ?public= URL override has been removed.
 
 = 2.0.9 =
 * Fixes a fatal error customers could see after paying. Please update.

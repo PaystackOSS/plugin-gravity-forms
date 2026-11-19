@@ -56,7 +56,7 @@ class GFPaystack extends GFPaymentAddOn
      *
      * @var string $_min_gravityforms_version The minimum version required.
      */
-    protected $_min_gravityforms_version = '2.0';
+    protected $_min_gravityforms_version = '2.5';
 
     /**
      * Defines the plugin slug.
@@ -301,10 +301,11 @@ class GFPaystack extends GFPaymentAddOn
      */
     public function api_settings_fields()
     {
-        $api_mode = '';
+        // Each mode's fields only show while that mode is selected, so a first-time setup starts in Test.
+        $api_mode = 'test';
 
-        if ($this->is_detail_page() && empty($api_mode)) {
-            $api_mode = $this->get_plugin_setting('api_mode');
+        if ($this->is_detail_page()) {
+            $api_mode = $this->get_plugin_setting('api_mode') ?: 'test';
         }
 
         $fields = array(
@@ -313,6 +314,7 @@ class GFPaystack extends GFPaymentAddOn
         'label'         => esc_html__('Mode', 'gravityformspaystack'),
         'type'          => 'radio',
         'default_value' => $api_mode,
+        'validation_callback' => array($this, 'validate_credentials'),
         'choices'       => array(
                     array(
                         'label' => esc_html__('Live', 'gravityformspaystack'),
@@ -327,24 +329,18 @@ class GFPaystack extends GFPaymentAddOn
         )
         );
 
-        $key_help = '<h6>' . esc_html__('Secret or Restricted Key', 'gravityformspaystack') . '</h6>' . esc_html__('A restricted key limits what this plugin can do with your Paystack account. Create one in your Paystack Dashboard with Transactions: read and write, plus Plans: write if you sell subscriptions.', 'gravityformspaystack');
-        $whsec_help = '<h6>' . esc_html__('Webhook Signing Secret', 'gravityformspaystack') . '</h6>' . esc_html__('Copy it from Settings → API Keys & Webhooks in your Paystack Dashboard. Required with a restricted key.', 'gravityformspaystack');
+        $key_help = '<h6>' . esc_html__('Restricted Key', 'gravityformspaystack') . '</h6>' . esc_html__('Create a restricted key in your Paystack Dashboard with Transactions: read and write, plus Plans: write if you sell subscriptions.', 'gravityformspaystack');
+        $whsec_help = '<h6>' . esc_html__('Webhook Signing Secret', 'gravityformspaystack') . '</h6>' . esc_html__('Copy it from Settings → API Keys & Webhooks in your Paystack Dashboard.', 'gravityformspaystack');
 
         $credentials_fields = array(
         array(
-        'name'  => 'test_public_key',
-        'label' => esc_html__('Test Public Key', 'gravityformspaystack'),
-        'type'  => 'text',
-        'class'    => 'medium',
-        ),
-        array(
         'name'  => 'test_secret_key',
-        'label' => esc_html__('Test Secret or Restricted Key', 'gravityformspaystack'),
+        'label' => esc_html__('Test Restricted Key', 'gravityformspaystack'),
         'type'  => 'text',
         'input_type' => 'password',
         'class'    => 'medium',
         'tooltip'  => $key_help,
-        'validation_callback' => array($this, 'validate_test_secret_key'),
+        'dependency' => $this->mode_dependency('test'),
         ),
         array(
         'name'  => 'test_webhook_secret',
@@ -353,22 +349,16 @@ class GFPaystack extends GFPaymentAddOn
         'input_type' => 'password',
         'class'    => 'medium',
         'tooltip'  => $whsec_help,
-        'validation_callback' => array($this, 'validate_test_webhook_secret'),
-        ),
-        array(
-        'name'  => 'live_public_key',
-        'label' => esc_html__('Live Public Key', 'gravityformspaystack'),
-        'type'  => 'text',
-        'class'    => 'medium',
+        'dependency' => $this->mode_dependency('test'),
         ),
         array(
         'name'  => 'live_secret_key',
-        'label' => esc_html__('Live Secret or Restricted Key', 'gravityformspaystack'),
+        'label' => esc_html__('Live Restricted Key', 'gravityformspaystack'),
         'type'  => 'text',
         'input_type' => 'password',
         'class'    => 'medium',
         'tooltip'  => $key_help,
-        'validation_callback' => array($this, 'validate_live_secret_key'),
+        'dependency' => $this->mode_dependency('live'),
         ),
         array(
         'name'  => 'live_webhook_secret',
@@ -377,7 +367,7 @@ class GFPaystack extends GFPaymentAddOn
         'input_type' => 'password',
         'class'    => 'medium',
         'tooltip'  => $whsec_help,
-        'validation_callback' => array($this, 'validate_live_webhook_secret'),
+        'dependency' => $this->mode_dependency('live'),
         ),
         );
 
@@ -405,6 +395,15 @@ class GFPaystack extends GFPaymentAddOn
         $fields = array_merge($fields, $webhook_fields);
 
         return $fields;
+    }
+
+    // Gravity Forms 2.5+ live dependency: the field shows and hides as the Mode radio changes.
+    protected function mode_dependency($mode)
+    {
+        return array(
+            'live'   => true,
+            'fields' => array(array('field' => 'api_mode', 'values' => array($mode))),
+        );
     }
 
     /**
@@ -441,7 +440,7 @@ class GFPaystack extends GFPaymentAddOn
                     </p>
                 </li>
                 <li><?php esc_html_e('Save Changes.', 'gravityformspaystack'); ?></li>
-                <li><?php esc_html_e('If you set a webhook signing secret (whsec_) from Settings → API Keys & Webhooks, webhooks are verified with it instead of your secret key.', 'gravityformspaystack'); ?></li>
+                <li><?php esc_html_e('Copy the webhook signing secret (whsec_) from the same page into the Webhook Signing Secret field. It is required with a restricted key.', 'gravityformspaystack'); ?></li>
             </ol>
         </div>
 
@@ -2036,7 +2035,6 @@ class GFPaystack extends GFPaymentAddOn
      * @used-by GFPaystack::subscribe()
      * @uses    GFAddOn::get_base_path()
      * @uses    GFPaystack::get_secret_api_key()
-     * @uses    GFPaystack::get_public_api_key()
      * 
      * @param null|string $mode     The API mode; live or test.
      * @param null|array  $settings The settings.
@@ -2055,7 +2053,6 @@ class GFPaystack extends GFPaymentAddOn
 
         $config = (object) array(
         'secret_key' => $this->get_secret_api_key($mode, $settings),
-        'public_key' => $this->get_public_api_key($mode, $settings),
         'webhook_secret' => $this->get_webhook_secret($mode, $settings),
         'stored_secret_key' => $this->get_stored_secret_key($mode, $settings)
         );
@@ -2095,29 +2092,31 @@ class GFPaystack extends GFPaymentAddOn
                     $settings[$name] = trim($settings[$name]);
                 }
             }
+            unset($settings['test_public_key'], $settings['live_public_key']);
         }
 
         parent::update_plugin_settings($settings);
     }
 
-    public function validate_test_secret_key($field)
+    /**
+     * Runs from the always-visible Mode field: Gravity Forms skips validation of fields hidden by a dependency but
+     * still saves their posted values, so both modes' credentials are checked on every save.
+     */
+    public function validate_credentials($field = null)
     {
-        $this->validate_secret_key_for_mode('test');
-    }
+        $selected = rgar($this->get_posted_settings(), 'api_mode');
+        if ($selected !== 'test' && $selected !== 'live') {
+            $this->set_field_error(array('name' => 'api_mode'), esc_html__('Choose Test or Live.', 'gravityformspaystack'));
+        }
 
-    public function validate_live_secret_key($field)
-    {
-        $this->validate_secret_key_for_mode('live');
-    }
+        foreach (array('test', 'live') as $mode) {
+            $failed = $this->validate_secret_key_for_mode($mode);
+            $failed = $this->validate_webhook_secret_for_mode($mode) || $failed;
 
-    public function validate_test_webhook_secret($field)
-    {
-        $this->validate_webhook_secret_for_mode('test');
-    }
-
-    public function validate_live_webhook_secret($field)
-    {
-        $this->validate_webhook_secret_for_mode('live');
+            if ($failed && $mode !== $selected && ($selected === 'test' || $selected === 'live')) {
+                $this->set_field_error(array('name' => 'api_mode'), sprintf(esc_html__('Your %1$s settings have a problem. Select %2$s to see it. No settings were saved.', 'gravityformspaystack'), $mode, $mode === 'test' ? esc_html__('Test', 'gravityformspaystack') : esc_html__('Live', 'gravityformspaystack')));
+            }
+        }
     }
 
     protected function resolve_posted_key($mode)
@@ -2129,8 +2128,7 @@ class GFPaystack extends GFPaymentAddOn
             trim((string) rgar($settings, "{$mode}_secret_key")),
             $this->get_plugin_setting("{$mode}_secret_key"),
             rgar($settings, "{$mode}_webhook_secret"),
-            rgar($settings, $this->other_mode($mode) . '_webhook_secret'),
-            GF_Paystack_Keys::restricted_keys_enabled()
+            rgar($settings, $this->other_mode($mode) . '_webhook_secret')
         );
     }
 
@@ -2140,7 +2138,11 @@ class GFPaystack extends GFPaymentAddOn
 
         if ($result['error'] !== null && strpos($result['error'], 'whsec_') === 0) {
             $this->set_save_error("{$mode}_webhook_secret", $this->key_error_message($result['error'], $mode));
+
+            return true;
         }
+
+        return false;
     }
 
     protected function validate_secret_key_for_mode($mode)
@@ -2151,12 +2153,15 @@ class GFPaystack extends GFPaymentAddOn
         if ($result['error'] !== null) {
             if (strpos($result['error'], 'whsec_') !== 0) {
                 $this->set_save_error("{$mode}_secret_key", $this->key_error_message($result['error'], $mode));
+
+                return true;
             }
-            return;
+
+            return false;
         }
 
         if (!$result['probe']) {
-            return;
+            return false;
         }
 
         $verdict = $this->validate_restricted_key($key);
@@ -2164,15 +2169,20 @@ class GFPaystack extends GFPaymentAddOn
 
         if ($verdict['code'] !== 'ok') {
             $this->set_save_error("{$mode}_secret_key", $this->probe_error_message($verdict));
-            return;
+
+            return true;
         }
 
         if ($this->has_subscription_feed($mode)) {
             $plans = $this->probe_restricted_key_plans($key);
             if ($plans !== 'ok') {
                 $this->set_save_error("{$mode}_secret_key", $this->plans_error_message($plans, $mode, 'settings'));
+
+                return true;
             }
         }
+
+        return false;
     }
 
     protected function has_subscription_feed($mode)
@@ -2282,14 +2292,14 @@ class GFPaystack extends GFPaymentAddOn
     protected function key_error_message($code, $mode)
     {
         switch ($code) {
+            case 'secret_key':
+                return sprintf(esc_html__('Use a %s restricted key instead. Create one in your Paystack Dashboard with Transactions: read and write.', 'gravityformspaystack'), $mode);
             case 'wrong_field':
-                return sprintf(esc_html__('This is a %1$s key. Paste it in the %1$s secret key field.', 'gravityformspaystack'), $this->other_mode($mode));
+                return sprintf(esc_html__('This is a %1$s key. Paste it in the %1$s restricted key field.', 'gravityformspaystack'), $this->other_mode($mode));
             case 'invalid_format':
-                return sprintf(esc_html__('Secret keys start with sk_%1$s_ and restricted keys with rk_%1$s_. Check you copied the whole key.', 'gravityformspaystack'), $mode);
-            case 'rk_disabled':
-                return esc_html__('Restricted keys are turned off on this site. Use your secret key instead.', 'gravityformspaystack');
+                return sprintf(esc_html__('Restricted keys start with rk_%s_. Check you copied the whole key.', 'gravityformspaystack'), $mode);
             case 'whsec_required':
-                return sprintf(esc_html__('A restricted key can\'t verify Paystack webhooks. Add your %s webhook signing secret from Settings → API Keys & Webhooks in your Paystack Dashboard.', 'gravityformspaystack'), $mode);
+                return sprintf(esc_html__('Add your %s webhook signing secret from Settings → API Keys & Webhooks in your Paystack Dashboard.', 'gravityformspaystack'), $mode);
             case 'whsec_format':
                 return esc_html__('Webhook signing secrets start with whsec_. Copy it from Settings → API Keys & Webhooks in your Paystack Dashboard.', 'gravityformspaystack');
             case 'whsec_same':
@@ -2340,7 +2350,6 @@ class GFPaystack extends GFPaymentAddOn
      *
      * @access public
      *
-     * @used-by GFPaystack::get_public_api_key()
      * @used-by GFPaystack::get_secret_api_key()
      * @uses    GFAddOn::get_plugin_settings()
      * @uses    GFPaystack::get_api_mode()
@@ -2399,28 +2408,13 @@ class GFPaystack extends GFPaymentAddOn
     }
 
     /**
-     * Retrieve the public api key.
-     *
-     * @access public
-     *
-     * @uses GFPaystack::get_api_key()
-     *
-     * @param null|string $mode     The API mode; live or test.
-     * @param array|null  $settings The current settings.
-     *
-     * @return string The public API key.
+     * @deprecated 2.0.10 Public keys are no longer used.
      */
     public function get_public_api_key($mode = null, $settings = null)
     {
-        if (empty($settings)) {
-            $settings = $this->get_plugin_settings();
-        }
+        _deprecated_function(__METHOD__, '2.0.10');
 
-        if (empty($mode)) {
-            $mode = $this->get_api_mode($settings);
-        }
-
-        return $this->get_api_key('public', $mode, $settings);
+        return '';
     }
 
     /**

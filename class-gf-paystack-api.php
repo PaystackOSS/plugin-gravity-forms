@@ -10,7 +10,6 @@ class GFPaystackApi
 {
     public $plugin_name;
     
-    protected $public_key;
     
     protected $secret_key;
 
@@ -25,7 +24,6 @@ class GFPaystackApi
     {
         $this->plugin_name = 'Paystack Addon for Gravity Forms';
         $this->secret_key = $config->secret_key ?? '';
-        $this->public_key = $config->public_key ?? '';
         $this->webhook_secret = $config->webhook_secret ?? '';
         $this->stored_secret_key = $config->stored_secret_key ?? '';
     }
@@ -38,16 +36,8 @@ class GFPaystackApi
      */
     public function log_transaction_success($reference)
     {
-        // Send reference to logger along with plugin name and public key
-        // $params = [
-        //     'plugin_name'  => $this->plugin_name,
-        //     'public_key' => $this->public_key,
-        //     'transaction_reference' => $reference
-        // ];
-
         $params = [
             'plugin_name'  => 'pstk-gravityforms',
-            'public_key' => $this->public_key,
             'transaction_reference' => $reference
         ];
 

@@ -454,9 +454,9 @@ $read_prop = function ($api, $prop) {
         return $this->$prop;
     })->call($api);
 };
-$qs_addon = $event_addon(array('api_mode' => 'live', 'live_secret_key' => $sk_live, 'live_public_key' => 'pk_live_stored'));
+$qs_addon = $event_addon(array('api_mode' => 'live', 'live_secret_key' => $sk_live));
 $qs_api = $qs_addon->paystack_api();
-gf_paystack_test_check($read_prop($qs_api, 'secret_key') === $sk_live && $read_prop($qs_api, 'public_key') === 'pk_live_stored', '?secret= and ?public= ignored when building the API client');
+gf_paystack_test_check($read_prop($qs_api, 'secret_key') === $sk_live, '?secret= ignored when building the API client');
 unset($_GET['secret'], $_GET['public'], $GLOBALS['gf_paystack_test_caps']);
 
 // # Coverage additions (dedicated test pass)
