@@ -5,7 +5,7 @@ Tags: payments, subscriptions, gravityforms
 Requires at least: 5.1
 Tested up to: 7.1
 Requires PHP: 7.2
-Stable tag: 2.0.9
+Stable tag: 2.0.10
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -74,7 +74,7 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 == Changelog ==
 
-= Unreleased =
+= 2.0.10 - November 19, 2026 =
 * Added support for Paystack restricted keys (`rk_test_...` / `rk_live_...`).
 * Added Test and Live webhook signing secret fields, and webhook signature verification when one is set.
 * Successful-payment (charge.success) webhooks are now confirmed with Paystack before an entry is marked as paid.
@@ -122,6 +122,9 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 
 == Upgrade Notice ==
+
+= 2.0.10 =
+* Adds optional Paystack restricted keys and webhook signing secrets. Existing secret keys keep working with no changes needed. The ?secret= / ?public= URL override has been removed.
 
 = 2.0.9 =
 * Fixes a fatal error customers could see after paying. Please update.
