@@ -173,7 +173,22 @@ $a2 = $st_run('live', $rk_posted, array(), function ($addon) use ($sub_feed, $ve
 gf_paystack_test_check($a2->plans_calls === array() && strpos($a2->field_errors['live_secret_key'], 'Paystack didn\'t accept this key.') === 0, 'settings save skips plans when the settings probe fails');
 
 $a = $st_run('live', array('live_secret_key' => $st_rk_live, 'live_webhook_secret' => $st_ws_live), array('live_secret_key' => $st_rk_live), $with_feeds(array($sub_feed('live')), 'plans_missing'), 'key');
-gf_paystack_test_check($a->plans_calls === array() && $a->field_errors === array(), 'settings save skips plans for an unchanged key');
+gf_paystack_test_check($a->plans_calls === array($st_rk_live) && strpos($a->field_errors['live_secret_key'] ?? '', 'Subscriptions need Plans: write') === 0, 'settings save re-checks plans for a kept key');
+
+// A kept restricted key is checked again on every save; only an unreachable Paystack is let through.
+$kept = array('live_secret_key' => $st_rk_live, 'live_webhook_secret' => $st_ws_live);
+$a = $st_run('live', $kept, array('live_secret_key' => $st_rk_live), $verdict(array('code' => 'sensitive_scope', 'sensitive_scopes' => array('transfers'))), 'key');
+gf_paystack_test_check($a->validate_calls === array($st_rk_live) && strpos($a->field_errors['live_secret_key'] ?? '', 'remove Transfers') !== false, 'settings kept key that gained transfers is refused');
+$a = $st_run('live', $kept, array('live_secret_key' => $st_rk_live), $verdict(array('code' => 'unverifiable', 'reason' => 'transient')), 'key');
+gf_paystack_test_check($a->field_errors === array(), 'settings kept key saves when Paystack is unreachable');
+$a = $st_run('live', $kept, array('live_secret_key' => $st_rk_live), $verdict(array('code' => 'unverifiable', 'reason' => 'blocked')), 'key');
+gf_paystack_test_check($a->field_errors === array(), 'settings kept key saves when the check is blocked');
+$a = $st_run('live', $kept, array(), $verdict(array('code' => 'unverifiable', 'reason' => 'transient')), 'key');
+gf_paystack_test_check(isset($a->field_errors['live_secret_key']), 'settings new key is refused when Paystack is unreachable');
+$a = $st_run('live', $kept, array('live_secret_key' => $st_rk_live), $with_feeds(array($sub_feed('live')), 'unverifiable'), 'key');
+gf_paystack_test_check($a->field_errors === array(), 'settings kept key saves when the plans check cannot reach Paystack');
+$a = $st_run('live', $kept, array('live_secret_key' => $st_rk_live), $verdict(array('code' => 'invalid_key')), 'key');
+gf_paystack_test_check(strpos($a->field_errors['live_secret_key'] ?? '', 'Paystack didn\'t accept this key.') === 0, 'settings kept key that was revoked is refused');
 
 $a = $st_run('live', array('live_secret_key' => $st_rk_live, 'live_webhook_secret' => $st_ws_live), array('live_secret_key' => $st_sk_live));
 gf_paystack_test_check($a->field_errors === array() && $a->validate_calls === array($st_rk_live), 'settings stored sk replaced by rk is probed');

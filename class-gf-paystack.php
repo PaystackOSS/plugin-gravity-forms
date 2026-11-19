@@ -2167,6 +2167,13 @@ class GFPaystack extends GFPaymentAddOn
         $verdict = $this->validate_restricted_key($key);
         $this->log_debug("rk validate mode={$mode} code={$verdict['code']} probes={$verdict['probes']}");
 
+        // A key that was already accepted stays usable when Paystack can't be reached, so an outage never blocks
+        // saving unrelated settings. A definite refusal still blocks.
+        $kept = $key === trim((string) $this->get_plugin_setting("{$mode}_secret_key"));
+        if ($kept && $verdict['code'] === 'unverifiable') {
+            return false;
+        }
+
         if ($verdict['code'] !== 'ok') {
             $this->set_save_error("{$mode}_secret_key", $this->probe_error_message($verdict));
 
@@ -2175,7 +2182,7 @@ class GFPaystack extends GFPaymentAddOn
 
         if ($this->has_subscription_feed($mode)) {
             $plans = $this->probe_restricted_key_plans($key);
-            if ($plans !== 'ok') {
+            if ($plans !== 'ok' && !($kept && $plans === 'unverifiable')) {
                 $this->set_save_error("{$mode}_secret_key", $this->plans_error_message($plans, $mode, 'settings'));
 
                 return true;

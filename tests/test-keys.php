@@ -23,6 +23,7 @@ $keys_cases = array(
     'new sk refused' => array(array('live', $sk_live, '', '', ''), false, 'secret_key'),
     'new sk other mode refused' => array(array('live', $sk_test, '', '', ''), false, 'secret_key'),
     'changed sk refused' => array(array('live', 'sk_live_rotated999', $sk_live, '', ''), false, 'secret_key'),
+    'kept rk with whsec is probed again' => array(array('live', $rk_live, $rk_live, $whsec_a, ''), true, null),
     'stored sk replaced by rk' => array(array('live', $rk_live, $sk_live, $whsec_a, ''), true, null),
     'new rk other mode' => array(array('test', $rk_live, '', $whsec_a, ''), false, 'wrong_field'),
     'new key bad shape' => array(array('live', 'rk_live_', '', $whsec_a, ''), false, 'invalid_format'),

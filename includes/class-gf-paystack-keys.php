@@ -35,6 +35,7 @@ if (!class_exists('GF_Paystack_Keys')) {
         }
 
         // Only a new or changed key must be restricted: an sk_ key saved by an earlier version keeps working until replaced.
+        // A restricted key, new or kept, is always probed.
         public static function resolve_save($mode, $posted_key, $stored_key, $posted_whsec, $other_mode_whsec)
         {
             $key = trim((string) $posted_key);
@@ -57,6 +58,9 @@ if (!class_exists('GF_Paystack_Keys')) {
                     return self::result(false, 'invalid_format');
                 }
 
+                $probe = true;
+            } elseif ($key !== '' && self::type($key) === 'rk') {
+                // Permissions can change in the Dashboard without the key changing, so a kept key is checked again.
                 $probe = true;
             }
 

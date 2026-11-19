@@ -17,7 +17,7 @@ The add-on connects to Paystack with a restricted key. Choose Test or Live under
 
 * The key needs Transactions: read and write permissions, plus Plans: write if you sell subscriptions.
 * Keys with permissions that can move money (transfers, refunds, settlements, payouts and similar) are rejected.
-* The key is checked with Paystack when you save it, and only then. If you change its permissions later in the Paystack Dashboard, it is not checked again.
+* The key is checked with Paystack every time you save the settings, so after changing its permissions in the Paystack Dashboard, click Save to check them. If Paystack can't be reached, a key that was already saved stays in use.
 * A restricted key needs the Webhook signing secret for the same mode (see below).
 * Sites set up before version 2.0.10 keep working with the key they already saved. When you replace it, the new key must be a restricted key.
 
@@ -75,6 +75,7 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 * Removed the public key fields. Payments never used them.
 * The settings page shows only the selected mode's fields.
 * Requires Gravity Forms 2.5 or later.
+* A restricted key's permissions are checked with Paystack every time the settings are saved.
 * Added Test and Live webhook signing secret fields, and webhook signature verification when one is set.
 * Successful-payment (charge.success) webhooks are now confirmed with Paystack before an entry is marked as paid.
 * Keys and signing secrets are hidden in logs.
