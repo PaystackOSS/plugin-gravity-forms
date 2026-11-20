@@ -156,12 +156,14 @@ if (!class_exists('GFForms')) {
 if (!class_exists('GFAddOn')) {
     class GFAddOn
     {
-        // Same contract as Gravity Forms 2.5+: the field is a settings field object, passed by reference.
+        // Gravity Forms 2.5+ takes the settings field object by reference and silently ignores anything else;
+        // the stub throws instead, so a dropped error fails the test.
         public function set_field_error(&$field, $error_message = '')
         {
-            if (is_object($field) && method_exists($field, 'set_error')) {
-                $field->set_error($error_message);
+            if (!$field instanceof GFPaystackTestSettingField) {
+                throw new LogicException('set_field_error() needs a settings field object');
             }
+            $field->set_error($error_message ? $error_message : 'This field is required.');
         }
 
         public function get_settings_renderer()

@@ -432,9 +432,42 @@ gf_paystack_test_check($a->field_errors === array() && $a->plans_calls === array
 $a = $feed_run(array('transactionType' => 'subscription'), array('api_mode' => 'test', 'test_secret_key' => $st_rk_test, 'live_secret_key' => $st_rk_live));
 gf_paystack_test_check($a->plans_calls === array($st_rk_test), 'feed without a mode follows the global api mode');
 
-// Gravity Forms 2.5+ only records errors on field objects, so errors must never be raised with an array.
+// Gravity Forms 2.5+ only records errors on field objects, so every error goes through set_setting_error().
 $plugin_src = file_get_contents(dirname(__DIR__) . '/class-gf-paystack.php');
-gf_paystack_test_check(!preg_match('/set_field_error\(\s*array\(/', $plugin_src), 'no field error is raised with an array (Gravity Forms 2.5+ needs the field object)');
+gf_paystack_test_check(substr_count($plugin_src, '->set_field_error(') === 1, 'set_field_error is only called from set_setting_error');
+$names = GFPaystackTestSettingsRenderer::defined_field_names(new GFPaystackSettingsFixture());
+$wanted = array('api_mode', 'test_secret_key', 'test_webhook_secret', 'live_secret_key', 'live_webhook_secret', 'transactionType');
+gf_paystack_test_check(!array_diff($wanted, $names), 'every field an error is raised on is a defined settings field: missing ' . implode(',', array_diff($wanted, $names)));
+// metaData is added after Gravity Forms' own billingInformation field, which the stubs don't build.
+gf_paystack_test_check(preg_match("/'name'\\s*=>\\s*'metaData'/", $plugin_src) === 1, 'metaData is a defined feed field');
+
+// If a field can't be found, the credential error lands on the Mode field instead of being dropped.
+$cred_lookup_fails = function ($posted, $stored = array()) {
+    $addon = new GFPaystackSettingsFixture();
+    $addon->posted = $posted;
+    $addon->stored = $stored;
+    $addon->renderer_fields = array();
+    $addon->validate_credentials(new GFPaystackTestSettingField('api_mode', $addon));
+
+    return $addon;
+};
+$a = $cred_lookup_fails(array('api_mode' => 'test', 'test_secret_key' => $st_sk_test . 'x'));
+gf_paystack_test_check(strpos($a->field_errors['api_mode'] ?? '', 'Use a test restricted key instead.') === 0, 'credentials: selected-mode key error falls back to Mode when its field is missing');
+$a = $cred_lookup_fails(array('api_mode' => 'test', 'live_secret_key' => $st_sk_live . 'x'));
+gf_paystack_test_check(isset($a->field_errors['api_mode']), 'credentials: other-mode error falls back to Mode when fields are missing');
+$a = $cred_lookup_fails(array('api_mode' => 'test', 'test_secret_key' => $st_rk_test));
+gf_paystack_test_check(isset($a->field_errors['api_mode']), 'credentials: missing signing secret falls back to Mode');
+
+$GLOBALS['gf_paystack_test_gf_logs'] = array();
+$a = new GFPaystackSettingsFixture();
+$a->renderer_fields = array();
+(function () { $this->set_setting_error('nope', 'x'); })->call($a);
+gf_paystack_test_check($a->field_errors === array() && strpos(json_encode($GLOBALS['gf_paystack_test_gf_logs']), 'no settings field to attach an error to (nope)') !== false, 'an error with nowhere to go is logged, not silently dropped');
+
+$a = $st_run('live', array('api_mode' => 'live', 'live_secret_key' => $st_rk_live, 'live_webhook_secret' => $st_ws_live), array(), function ($addon) {
+    $addon->verdict = array('code' => 'sensitive_scope', 'scopes' => array(), 'sensitive_scopes' => array('<img src=x>'), 'reason' => null, 'probes' => '');
+});
+gf_paystack_test_check(strpos($a->field_errors['live_secret_key'] ?? '', '&lt;img') !== false && strpos($a->field_errors['live_secret_key'], '<img') === false, 'scope labels are escaped in key errors');
 
 $meta_run = function ($meta, $renderer_fields = null) {
     $addon = new GFPaystackSettingsFixture();

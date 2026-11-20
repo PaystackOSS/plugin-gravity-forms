@@ -212,14 +212,40 @@ class GFPaystackTestSettingsRenderer
         $this->fixture = $fixture;
     }
 
+    // Like Gravity Forms, only fields the add-on defines are found; renderer_fields overrides the list.
     public function get_field($name)
     {
         $known = $this->fixture->renderer_fields;
-        if (is_array($known) && !in_array($name, $known, true)) {
+        if (!is_array($known)) {
+            $known = self::defined_field_names($this->fixture);
+        }
+        if (!in_array($name, $known, true)) {
             return false;
         }
 
         return new GFPaystackTestSettingField($name, $this->fixture);
+    }
+
+    public static function defined_field_names($addon)
+    {
+        $names   = array();
+        $collect = function ($items) use (&$collect, &$names) {
+            foreach ((array) $items as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                if (isset($item['name'])) {
+                    $names[] = $item['name'];
+                }
+                if (isset($item['fields'])) {
+                    $collect($item['fields']);
+                }
+            }
+        };
+        $collect($addon->plugin_settings_fields());
+        $collect($addon->feed_settings_fields());
+
+        return $names;
     }
 }
 

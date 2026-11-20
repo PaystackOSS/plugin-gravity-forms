@@ -2105,6 +2105,16 @@ class GFPaystack extends GFPaymentAddOn
      */
     public function validate_credentials($field = null)
     {
+        $this->validating_field = $field;
+        try {
+            $this->validate_both_modes($field);
+        } finally {
+            $this->validating_field = null;
+        }
+    }
+
+    private function validate_both_modes($field)
+    {
         $selected = rgar($this->get_posted_settings(), 'api_mode');
         if ($selected !== 'test' && $selected !== 'live') {
             $this->set_setting_error('api_mode', esc_html__('Choose Test or Live.', 'gravityformspaystack'), $field);
@@ -2115,7 +2125,7 @@ class GFPaystack extends GFPaymentAddOn
             $failed = $this->validate_webhook_secret_for_mode($mode) || $failed;
 
             if ($failed && $mode !== $selected && ($selected === 'test' || $selected === 'live')) {
-                $this->set_setting_error('api_mode', sprintf(esc_html__('Your %1$s settings have a problem. Select %2$s to see it. No settings were saved.', 'gravityformspaystack'), $mode, $mode === 'test' ? esc_html__('Test', 'gravityformspaystack') : esc_html__('Live', 'gravityformspaystack')));
+                $this->set_setting_error('api_mode', sprintf(esc_html__('Your %1$s settings have a problem. Select %2$s to see it. No settings were saved.', 'gravityformspaystack'), $mode, $mode === 'test' ? esc_html__('Test', 'gravityformspaystack') : esc_html__('Live', 'gravityformspaystack')), $field);
             }
         }
     }
@@ -2287,6 +2297,9 @@ class GFPaystack extends GFPaymentAddOn
         return esc_html__('We couldn\'t reach Paystack to check this key. Please try again.', 'gravityformspaystack');
     }
 
+    /** The Mode field while validate_credentials() runs: where an error goes if its own field can't be found. */
+    private $validating_field = null;
+
     protected function set_save_error($field_name, $message)
     {
         $this->set_setting_error($field_name, $message . ' ' . esc_html__('No settings were saved.', 'gravityformspaystack'));
@@ -2294,18 +2307,20 @@ class GFPaystack extends GFPaymentAddOn
 
     /**
      * Gravity Forms 2.5+ only records an error on the settings field object, passed by reference, so the field is
-     * looked up by name. $fallback (the field being validated) keeps the save blocked if the lookup ever fails.
+     * looked up by name. If the lookup fails, the error goes on the field being validated, so the save stays blocked.
      */
     protected function set_setting_error($name, $message, $fallback = null)
     {
         $renderer = $this->get_settings_renderer();
         $field    = $renderer ? $renderer->get_field($name) : false;
         if (!is_object($field)) {
-            $field = $fallback;
+            $field = is_object($fallback) ? $fallback : $this->validating_field;
         }
         if (is_object($field)) {
             $this->set_field_error($field, $message);
+            return;
         }
+        $this->log_error(__METHOD__ . "(): no settings field to attach an error to ({$name}).");
     }
 
     private function other_mode($mode)
@@ -2361,7 +2376,7 @@ class GFPaystack extends GFPaymentAddOn
     {
         $out = array();
         foreach ($scopes as $scope) {
-            $out[] = GF_Paystack_Restricted_Key::scope_label($scope);
+            $out[] = esc_html(GF_Paystack_Restricted_Key::scope_label($scope));
         }
 
         return implode(', ', $out);
