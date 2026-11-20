@@ -5,18 +5,35 @@ Tags: payments, subscriptions, gravityforms
 Requires at least: 5.1
 Tested up to: 7.1
 Requires PHP: 7.2
-Stable tag: 2.0.9
+Stable tag: 2.0.10
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
 == Description ==
 The Paystack Addon for Gravity Forms allows you to quickly and easily implement credit card payments with WordPress. With the Paystack Add-On you can capture one time credit card payments or setup recurring payment subscriptions.
 
+= Restricted keys =
+The add-on connects to Paystack with a restricted key. Choose Test or Live under Mode, then paste an `rk_test_...` or `rk_live_...` key into that mode's Restricted Key field. Only the selected mode's fields are shown.
+
+* The key needs Transactions: read and write permissions, plus Plans: write if you sell subscriptions.
+* Keys with permissions that can move money (transfers, refunds, settlements, payouts and similar) are rejected.
+* The key is checked with Paystack every time you save the settings, so after changing its permissions in the Paystack Dashboard, click Save to check them. If Paystack can't be reached, a key that was already saved stays in use.
+* A restricted key needs the Webhook signing secret for the same mode (see below).
+* Sites set up before version 2.0.10 keep working with the key they already saved. When you replace it, the new key must be a restricted key.
+
+= Webhook signing secret =
+The Test and Live settings have a "Webhook signing secret" field. Copy the `whsec_...` value from Settings > API Keys & Webhooks in your Paystack Dashboard.
+
+* It is required with a restricted key.
+* Once it is set, webhooks are only accepted with a valid Paystack-Signature header that was signed within the last 5 minutes.
+* Successful-payment webhooks are confirmed with Paystack before an entry is marked as paid.
+* The webhook URL must listen to charge.success. Forms that sell subscriptions also need subscription.create, subscription.disable, invoice.create, invoice.update and invoice.payment_failed. Selecting all events is fine: the others are ignored.
+
 
 == Installation ==
  
 = Minimum Requirements =
-* Gravity Forms v2.4+
+* Gravity Forms v2.5+
 * WordPress v5.1+
 * SSL Certificate Installed and - Configured
 * Download and install the add-on
@@ -53,6 +70,18 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 
 == Changelog ==
+
+= 2.0.10 - November 19, 2026 =
+* The add-on now uses Paystack restricted keys (`rk_test_...` / `rk_live_...`). A key saved by an earlier version keeps working until you replace it; a new key must be a restricted key.
+* Removed the public key fields. Payments never used them.
+* The settings page shows only the selected mode's fields.
+* Requires Gravity Forms 2.5 or later.
+* A restricted key's permissions are checked with Paystack every time the settings are saved.
+* Added Test and Live webhook signing secret fields, and webhook signature verification when one is set.
+* Successful-payment (charge.success) webhooks are now confirmed with Paystack before an entry is marked as paid.
+* Keys and signing secrets are hidden in logs.
+* The key fields are now password inputs.
+* Removed the admin-only ?secret= / ?public= URL override for API keys.
 
 = 2.0.9 - October 28, 2026 =
 * Fixed a fatal error on the confirmation page after a successful payment when the usage tracking service is unreachable.
@@ -94,6 +123,9 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 
 == Upgrade Notice ==
+
+= 2.0.10 =
+* Adds Paystack restricted keys and webhook signing secrets. Your saved key keeps working with no changes needed; a new key must be a restricted key. Requires Gravity Forms 2.5 or later. The ?secret= / ?public= URL override has been removed.
 
 = 2.0.9 =
 * Fixes a fatal error customers could see after paying. Please update.

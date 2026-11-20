@@ -25,6 +25,14 @@ function gf_paystack_test_check($condition, $label)
 $test_files = glob(__DIR__ . '/test-*.php');
 sort($test_files);
 foreach ($test_files as $test_file) {
+    $GLOBALS['gf_paystack_test_filters'] = array();
+    if (class_exists('GF_Paystack_Restricted_Key')) {
+        GF_Paystack_Restricted_Key::reset_budget();
+    }
+    $GLOBALS['gf_paystack_test_gf_logs'] = array();
+    $GLOBALS['gf_paystack_test_saved_settings'] = null;
+    $_GET = array();
+    unset($_SERVER['HTTP_PAYSTACK_SIGNATURE'], $_SERVER['HTTP_X_PAYSTACK_SIGNATURE']);
     require $test_file;
 }
 

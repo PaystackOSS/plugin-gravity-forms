@@ -125,10 +125,16 @@ class GFPaystackGatewayFixture extends GFPaystackCallbackFixture
 class GFPaystackEventFixture extends GFPaystack
 {
     public $settings = array();
+    public $errors = array();
 
     public function get_plugin_settings()
     {
         return $this->settings;
+    }
+
+    public function log_error($message)
+    {
+        $this->errors[] = $message;
     }
 
     public function webhook_mode_value()
@@ -176,4 +182,142 @@ function gf_paystack_exception_message($callback)
     }
 
     return '';
+}
+
+// Stands in for Gravity Forms' Settings renderer and its field objects; errors land in the fixture's field_errors.
+class GFPaystackTestSettingField
+{
+    public $name;
+    private $fixture;
+
+    public function __construct($name, $fixture)
+    {
+        $this->name    = $name;
+        $this->fixture = $fixture;
+    }
+
+    public function set_error($message = '')
+    {
+        $this->fixture->field_errors[$this->name] = $message;
+        $this->fixture->error_log[] = $this->name;
+    }
+}
+
+class GFPaystackTestSettingsRenderer
+{
+    private $fixture;
+
+    public function __construct($fixture)
+    {
+        $this->fixture = $fixture;
+    }
+
+    // Like Gravity Forms, only fields the add-on defines are found; renderer_fields overrides the list.
+    public function get_field($name)
+    {
+        $known = $this->fixture->renderer_fields;
+        if (!is_array($known)) {
+            $known = self::defined_field_names($this->fixture);
+        }
+        if (!in_array($name, $known, true)) {
+            return false;
+        }
+
+        return new GFPaystackTestSettingField($name, $this->fixture);
+    }
+
+    public static function defined_field_names($addon)
+    {
+        $names   = array();
+        $collect = function ($items) use (&$collect, &$names) {
+            foreach ((array) $items as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                if (isset($item['name'])) {
+                    $names[] = $item['name'];
+                }
+                if (isset($item['fields'])) {
+                    $collect($item['fields']);
+                }
+            }
+        };
+        $collect($addon->plugin_settings_fields());
+        $collect($addon->feed_settings_fields());
+
+        return $names;
+    }
+}
+
+class GFPaystackSettingsFixture extends GFPaystack
+{
+    public $posted = array();
+    public $stored = array();
+    public $field_errors = array();
+    public $verdict = array('code' => 'ok', 'scopes' => array(), 'sensitive_scopes' => array(), 'reason' => null, 'probes' => 'transactions:read:200');
+    public $plans_result = 'ok';
+    public $validate_calls = array();
+    public $plans_calls = array();
+    public $feeds = array();
+    public $current_feed = false;
+    public $error_log = array();
+
+    public function get_feeds($form_id = null)
+    {
+        return $this->feeds;
+    }
+
+    public function get_current_feed()
+    {
+        return $this->current_feed;
+    }
+
+    public function get_posted_settings()
+    {
+        return $this->posted;
+    }
+
+    public function get_plugin_setting($name)
+    {
+        return rgar($this->stored, $name);
+    }
+
+    public function get_plugin_settings()
+    {
+        return $this->stored;
+    }
+
+    public $renderer_fields = null;
+
+    public function get_settings_renderer()
+    {
+        return new GFPaystackTestSettingsRenderer($this);
+    }
+
+    public function is_detail_page()
+    {
+        return false;
+    }
+
+    public function get_current_feed_id()
+    {
+        return 0;
+    }
+
+    public function get_webhook_url($feed_id = null)
+    {
+        return 'https://example.test/?callback=gravityformspaystack';
+    }
+
+    protected function validate_restricted_key($key)
+    {
+        $this->validate_calls[] = $key;
+        return $this->verdict;
+    }
+
+    protected function probe_restricted_key_plans($key)
+    {
+        $this->plans_calls[] = $key;
+        return $this->plans_result;
+    }
 }
