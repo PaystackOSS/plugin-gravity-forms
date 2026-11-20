@@ -184,6 +184,45 @@ function gf_paystack_exception_message($callback)
     return '';
 }
 
+// Stands in for Gravity Forms' Settings renderer and its field objects; errors land in the fixture's field_errors.
+class GFPaystackTestSettingField
+{
+    public $name;
+    private $fixture;
+
+    public function __construct($name, $fixture)
+    {
+        $this->name    = $name;
+        $this->fixture = $fixture;
+    }
+
+    public function set_error($message = '')
+    {
+        $this->fixture->field_errors[$this->name] = $message;
+        $this->fixture->error_log[] = $this->name;
+    }
+}
+
+class GFPaystackTestSettingsRenderer
+{
+    private $fixture;
+
+    public function __construct($fixture)
+    {
+        $this->fixture = $fixture;
+    }
+
+    public function get_field($name)
+    {
+        $known = $this->fixture->renderer_fields;
+        if (is_array($known) && !in_array($name, $known, true)) {
+            return false;
+        }
+
+        return new GFPaystackTestSettingField($name, $this->fixture);
+    }
+}
+
 class GFPaystackSettingsFixture extends GFPaystack
 {
     public $posted = array();
@@ -222,10 +261,11 @@ class GFPaystackSettingsFixture extends GFPaystack
         return $this->stored;
     }
 
-    public function set_field_error($field, $message = '')
+    public $renderer_fields = null;
+
+    public function get_settings_renderer()
     {
-        $this->field_errors[$field['name']] = $message;
-        $this->error_log[] = $field['name'];
+        return new GFPaystackTestSettingsRenderer($this);
     }
 
     public function is_detail_page()

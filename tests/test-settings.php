@@ -431,3 +431,24 @@ gf_paystack_test_check($a->field_errors === array() && $a->plans_calls === array
 
 $a = $feed_run(array('transactionType' => 'subscription'), array('api_mode' => 'test', 'test_secret_key' => $st_rk_test, 'live_secret_key' => $st_rk_live));
 gf_paystack_test_check($a->plans_calls === array($st_rk_test), 'feed without a mode follows the global api mode');
+
+// Gravity Forms 2.5+ only records errors on field objects, so errors must never be raised with an array.
+$plugin_src = file_get_contents(dirname(__DIR__) . '/class-gf-paystack.php');
+gf_paystack_test_check(!preg_match('/set_field_error\(\s*array\(/', $plugin_src), 'no field error is raised with an array (Gravity Forms 2.5+ needs the field object)');
+
+$meta_run = function ($meta, $renderer_fields = null) {
+    $addon = new GFPaystackSettingsFixture();
+    $addon->posted = array('metaData' => $meta);
+    $addon->renderer_fields = $renderer_fields;
+    $addon->validate_custom_meta(new GFPaystackTestSettingField('metaData', $addon));
+
+    return $addon;
+};
+$a = $meta_run(array_fill(0, 21, array('custom_key' => 'k', 'value' => '1')));
+gf_paystack_test_check(($a->field_errors['metaData'] ?? '') === 'You may only have 20 custom keys.', 'feed metadata over 20 keys is flagged on metaData');
+$a = $meta_run(array(array('custom_key' => '', 'value' => '3')));
+gf_paystack_test_check(strpos($a->field_errors['metaData'] ?? '', 'A field has been mapped to a custom key without a name.') === 0, 'feed metadata without a key name is flagged');
+$a = $meta_run(array(array('custom_key' => str_repeat('<b>', 14), 'value' => '3')));
+gf_paystack_test_check(strpos($a->field_errors['metaData'] ?? '', '&lt;b&gt;') !== false && strpos($a->field_errors['metaData'], '<b>') === false, 'feed metadata long key name is flagged and escaped');
+$a = $meta_run(array(array('custom_key' => '', 'value' => '3')), array());
+gf_paystack_test_check(isset($a->field_errors['metaData']), 'an error falls back to the validated field when the renderer cannot find it');

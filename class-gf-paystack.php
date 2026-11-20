@@ -860,17 +860,17 @@ class GFPaystack extends GFPaymentAddOn
 
         // If there are more than 20 metadata keys, set field error.
         if ($meta_count > 20) {
-            $this->set_field_error(array(esc_html__('You may only have 20 custom keys.'), 'gravityformspaystack'));
+            $this->set_setting_error('metaData', esc_html__('You may only have 20 custom keys.', 'gravityformspaystack'), $field);
             return;
         }
 
         // Loop through metadata and check the key name length (custom_key).
         foreach ($meta_data as $meta) {
             if (empty($meta['custom_key']) && !empty($meta['value'])) {
-                $this->set_field_error(array('name' => 'metaData'), esc_html__("A field has been mapped to a custom key without a name. Please enter a name for the custom key, remove the metadata item, or return the corresponding drop down to 'Select a Field'.", 'gravityformspaystack'));
+                $this->set_setting_error('metaData', esc_html__("A field has been mapped to a custom key without a name. Please enter a name for the custom key, remove the metadata item, or return the corresponding drop down to 'Select a Field'.", 'gravityformspaystack'), $field);
                 break;
             } else if (strlen($meta['custom_key']) > 40) {
-                $this->set_field_error(array('name' => 'metaData'), sprintf(esc_html__('The name of custom key %s is too long. Please shorten this to 40 characters or less.', 'gravityformspaystack'), $meta['custom_key']));
+                $this->set_setting_error('metaData', sprintf(esc_html__('The name of custom key %s is too long. Please shorten this to 40 characters or less.', 'gravityformspaystack'), esc_html($meta['custom_key'])), $field);
                 break;
             }
         }
@@ -2107,7 +2107,7 @@ class GFPaystack extends GFPaymentAddOn
     {
         $selected = rgar($this->get_posted_settings(), 'api_mode');
         if ($selected !== 'test' && $selected !== 'live') {
-            $this->set_field_error(array('name' => 'api_mode'), esc_html__('Choose Test or Live.', 'gravityformspaystack'));
+            $this->set_setting_error('api_mode', esc_html__('Choose Test or Live.', 'gravityformspaystack'), $field);
         }
 
         foreach (array('test', 'live') as $mode) {
@@ -2115,7 +2115,7 @@ class GFPaystack extends GFPaymentAddOn
             $failed = $this->validate_webhook_secret_for_mode($mode) || $failed;
 
             if ($failed && $mode !== $selected && ($selected === 'test' || $selected === 'live')) {
-                $this->set_field_error(array('name' => 'api_mode'), sprintf(esc_html__('Your %1$s settings have a problem. Select %2$s to see it. No settings were saved.', 'gravityformspaystack'), $mode, $mode === 'test' ? esc_html__('Test', 'gravityformspaystack') : esc_html__('Live', 'gravityformspaystack')));
+                $this->set_setting_error('api_mode', sprintf(esc_html__('Your %1$s settings have a problem. Select %2$s to see it. No settings were saved.', 'gravityformspaystack'), $mode, $mode === 'test' ? esc_html__('Test', 'gravityformspaystack') : esc_html__('Live', 'gravityformspaystack')));
             }
         }
     }
@@ -2247,7 +2247,7 @@ class GFPaystack extends GFPaymentAddOn
         }
 
         if (!is_string($type) || $type === '' || !in_array($type, $allowed, true)) {
-            $this->set_field_error(array('name' => 'transactionType'), esc_html__('This field is required.', 'gravityformspaystack'));
+            $this->set_setting_error('transactionType', esc_html__('This field is required.', 'gravityformspaystack'), $field);
             return;
         }
 
@@ -2268,7 +2268,7 @@ class GFPaystack extends GFPaymentAddOn
 
         $result = $this->probe_restricted_key_plans($key);
         if ($result !== 'ok') {
-            $this->set_field_error(array('name' => 'transactionType'), $this->plans_error_message($result, $mode));
+            $this->set_setting_error('transactionType', $this->plans_error_message($result, $mode), $field);
         }
     }
 
@@ -2289,7 +2289,23 @@ class GFPaystack extends GFPaymentAddOn
 
     protected function set_save_error($field_name, $message)
     {
-        $this->set_field_error(array('name' => $field_name), $message . ' ' . esc_html__('No settings were saved.', 'gravityformspaystack'));
+        $this->set_setting_error($field_name, $message . ' ' . esc_html__('No settings were saved.', 'gravityformspaystack'));
+    }
+
+    /**
+     * Gravity Forms 2.5+ only records an error on the settings field object, passed by reference, so the field is
+     * looked up by name. $fallback (the field being validated) keeps the save blocked if the lookup ever fails.
+     */
+    protected function set_setting_error($name, $message, $fallback = null)
+    {
+        $renderer = $this->get_settings_renderer();
+        $field    = $renderer ? $renderer->get_field($name) : false;
+        if (!is_object($field)) {
+            $field = $fallback;
+        }
+        if (is_object($field)) {
+            $this->set_field_error($field, $message);
+        }
     }
 
     private function other_mode($mode)
