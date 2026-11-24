@@ -3,19 +3,29 @@ if (!defined('ABSPATH')) {
     die('You are not allowed to call this page directly.');
 }
 
+require_once __DIR__ . '/includes/class-gf-paystack-keys.php';
+require_once __DIR__ . '/includes/class-gf-paystack-restricted-key.php';
+
 class GFPaystackApi
 {
     public $plugin_name;
     
-    protected $public_key;
     
     protected $secret_key;
+
+    protected $webhook_secret;
+
+    protected $stored_secret_key;
+
+    /** @var array|null Path (`whsec`|`legacy`|`none`) and outcome of the last validate_webhook() call. */
+    public $last_webhook_check = null;
 
     public function __construct($config)
     {
         $this->plugin_name = 'Paystack Addon for Gravity Forms';
         $this->secret_key = $config->secret_key ?? '';
-        $this->public_key = $config->public_key ?? '';
+        $this->webhook_secret = $config->webhook_secret ?? '';
+        $this->stored_secret_key = $config->stored_secret_key ?? '';
     }
 
     /**
@@ -26,16 +36,8 @@ class GFPaystackApi
      */
     public function log_transaction_success($reference)
     {
-        // Send reference to logger along with plugin name and public key
-        // $params = [
-        //     'plugin_name'  => $this->plugin_name,
-        //     'public_key' => $this->public_key,
-        //     'transaction_reference' => $reference
-        // ];
-
         $params = [
             'plugin_name'  => 'pstk-gravityforms',
-            'public_key' => $this->public_key,
             'transaction_reference' => $reference
         ];
 
@@ -48,7 +50,7 @@ class GFPaystackApi
                 'https://plugin-tracker.paystackintegrations.com/'
             );
         } catch (\Throwable $e) {
-            error_log(__METHOD__ . '(): plugin tracker request failed: ' . $e->getMessage());
+            error_log(GF_Paystack_Keys::redact(__METHOD__ . '(): plugin tracker request failed: ' . $e->getMessage()));
         }
     }
 
@@ -86,7 +88,12 @@ class GFPaystackApi
         $body = json_decode($res['body'], true);
 
         if (is_array($body)) {
-            error_log(__METHOD__ . '(): ' . strtoupper($method) . ' ' . $uri . ' status: ' . (isset($body['status']) ? var_export($body['status'], true) : 'unknown'));
+            error_log(GF_Paystack_Keys::redact(__METHOD__ . '(): ' . strtoupper($method) . ' ' . $uri . ' status: ' . (isset($body['status']) ? var_export($body['status'], true) : 'unknown')));
+
+            $code = isset($res['response']['code']) ? (int) $res['response']['code'] : 0;
+            if ($code === 403 && isset($body['message']) && $body['message'] === GF_Paystack_Restricted_Key::SCOPE_DENIED_MESSAGE) {
+                error_log(GF_Paystack_Keys::redact('rk scope denied method=' . strtoupper($method) . ' path=' . parse_url($uri, PHP_URL_PATH)));
+            }
 
             if (isset($body['error']) || $body['status'] == false) {
                 throw new Exception("{$body['message']}");
@@ -113,21 +120,99 @@ class GFPaystackApi
     /**
      * Validate Webhook Signature
      *
-     * @param $input
-     * @param string|null $signature Defaults to the request's signature header.
+     * A configured signing secret decides alone; the legacy sk HMAC is only used when none is set.
+     *
+     * @param string      $input          The raw body that will be decoded.
+     * @param string|null $signature      Legacy X-Paystack-Signature; defaults to the request's header.
+     * @param string|null $signing_header Paystack-Signature; defaults to the request's header.
      * @return boolean
      */
-    public function validate_webhook($input, $signature = null)
+    public function validate_webhook($input, $signature = null, $signing_header = null)
     {
-        if ($signature === null) {
-            $signature = isset($_SERVER['HTTP_X_PAYSTACK_SIGNATURE']) ? $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] : '';
+        if (is_string($this->webhook_secret) && trim($this->webhook_secret) !== '') {
+            if ($signing_header === null) {
+                $signing_header = isset($_SERVER['HTTP_PAYSTACK_SIGNATURE']) ? $_SERVER['HTTP_PAYSTACK_SIGNATURE'] : '';
+            }
+
+            $outcome = $this->check_signing_secret_header($input, $signing_header);
+            $this->last_webhook_check = array('sig' => 'whsec', 'result' => $outcome);
+
+            return $outcome === 'valid';
         }
 
-        if (!is_string($signature) || $signature === '' || !is_string($this->secret_key) || trim($this->secret_key) === '') {
-            return false;
+        if (GF_Paystack_Keys::type($this->stored_secret_key) === 'sk') {
+            if ($signature === null) {
+                $signature = isset($_SERVER['HTTP_X_PAYSTACK_SIGNATURE']) ? $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] : '';
+            }
+
+            $is_valid = is_string($signature) && $signature !== ''
+                && hash_equals(hash_hmac('sha512', (string) $input, $this->stored_secret_key), $signature);
+            $this->last_webhook_check = array('sig' => 'legacy', 'result' => $is_valid ? 'valid' : 'invalid');
+
+            return $is_valid;
         }
 
-        return hash_equals(hash_hmac('sha512', (string) $input, $this->secret_key), $signature);
+        $this->last_webhook_check = array('sig' => 'none', 'result' => 'invalid');
+
+        return false;
+    }
+
+    /**
+     * Verify a `Paystack-Signature: t=<unix>,v1=<kid>:<hex>[,v1=...]` header.
+     *
+     * @param string   $input  The raw body.
+     * @param mixed    $header The header value.
+     * @param int|null $now    Current unix time; defaults to time().
+     * @return string valid|stale|invalid|malformed
+     */
+    public function check_signing_secret_header($input, $header, $now = null)
+    {
+        if (!is_string($this->webhook_secret) || trim($this->webhook_secret) === '' || !is_string($header)) {
+            return 'malformed';
+        }
+
+        $timestamps = array();
+        $signatures = array();
+        foreach (explode(',', $header) as $part) {
+            $pair = explode('=', $part, 2);
+            if (count($pair) !== 2) {
+                continue;
+            }
+
+            $name = trim($pair[0]);
+            $value = trim($pair[1]);
+            if ($name === 't') {
+                $timestamps[] = $value;
+            } elseif ($name === 'v1' && count($signatures) < 10) {
+                $colon = strrpos($value, ':');
+                $hex = $colon === false ? '' : substr($value, $colon + 1);
+                if ($colon > 0 && preg_match('/^[0-9a-fA-F]{128}$/', $hex)) {
+                    $signatures[] = strtolower($hex);
+                }
+            }
+        }
+
+        if (count($timestamps) !== 1 || !ctype_digit($timestamps[0]) || empty($signatures)) {
+            return 'malformed';
+        }
+
+        $timestamp = $timestamps[0];
+        $expected = hash_hmac('sha512', $timestamp . '.' . (string) $input, $this->webhook_secret);
+
+        $matched = false;
+        foreach ($signatures as $candidate) {
+            if (hash_equals($expected, $candidate)) {
+                $matched = true;
+            }
+        }
+
+        if (!$matched) {
+            return 'invalid';
+        }
+
+        $now = $now === null ? time() : (int) $now;
+
+        return abs($now - (int) $timestamp) <= 300 ? 'valid' : 'stale';
     }
 
     /**
