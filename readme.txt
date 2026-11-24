@@ -71,7 +71,7 @@ Yes you can! Join in on our [GitHub repository](https://github.com/PaystackHQ/pl
 
 == Changelog ==
 
-= 2.0.10 - November 19, 2026 =
+= 2.0.10 - November 24, 2026 =
 * The add-on now uses Paystack restricted keys (`rk_test_...` / `rk_live_...`). A key saved by an earlier version keeps working until you replace it; a new key must be a restricted key.
 * Removed the public key fields. Payments never used them.
 * The settings page shows only the selected mode's fields.
